@@ -19,16 +19,14 @@ steps:
   - label: ":gear: Setup Environment"
     key: setup
     commands:
-      - export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
-
-      - echo "--- Installing Python dependencies"
-      - uv sync
-
-      - echo "--- Importing CI configuration"
-      - uv run python -m harness import-config -s evals/configs/ci-snapshot.json -o /tmp/ci-home
-
-      - echo "--- Validating configuration"
-      - ls -la /tmp/ci-home/.claude/
+      - |
+        export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
+        echo "--- Installing Python dependencies"
+        uv sync
+        echo "--- Importing CI configuration"
+        uv run python -m harness import-config -s evals/configs/ci-snapshot.json -o /tmp/ci-home
+        echo "--- Validating configuration"
+        ls -la /tmp/ci-home/.claude/
     artifact_paths:
       - "/tmp/ci-home/**/*"
     plugins:
@@ -43,20 +41,16 @@ steps:
     depends_on: setup
     parallelism: 4
     commands:
-      - export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
-
-      - echo "--- Installing Node.js and npm"
-      - apt-get update && apt-get install -y nodejs npm
-
-      - echo "--- Installing Claude Code ${PINNED_VERSION}"
-      - npm install -g @anthropic-ai/claude-code@${PINNED_VERSION}
-      - claude --version
-
-      - echo "--- Setting up CI environment"
-      - export HOME=/tmp/ci-home
-
-      - echo "--- Running evaluation matrix"
       - |
+        export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
+        echo "--- Installing Node.js and npm"
+        apt-get update && apt-get install -y nodejs npm
+        echo "--- Installing Claude Code ${PINNED_VERSION}"
+        npm install -g @anthropic-ai/claude-code@${PINNED_VERSION}
+        claude --version
+        echo "--- Setting up CI environment"
+        export HOME=/tmp/ci-home
+        echo "--- Running evaluation matrix"
         uv run python -m harness matrix \
           --tasks "evals/tasks/**/*.task.yaml" \
           --configs "evals/configs/*/config.yaml" \
@@ -79,21 +73,17 @@ steps:
     parallelism: 4
     soft_fail: true  # Don't block on latest failures
     commands:
-      - export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
-
-      - echo "--- Installing Node.js and npm"
-      - apt-get update && apt-get install -y nodejs npm
-
-      - echo "--- Installing Claude Code latest"
-      - npm install -g @anthropic-ai/claude-code@latest
-      - LATEST_VERSION=$(claude --version | head -1)
-      - echo "Testing Claude Code ${LATEST_VERSION}"
-
-      - echo "--- Setting up CI environment"
-      - export HOME=/tmp/ci-home
-
-      - echo "--- Running evaluation matrix"
       - |
+        export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
+        echo "--- Installing Node.js and npm"
+        apt-get update && apt-get install -y nodejs npm
+        echo "--- Installing Claude Code latest"
+        npm install -g @anthropic-ai/claude-code@latest
+        LATEST_VERSION=$(claude --version | head -1)
+        echo "Testing Claude Code ${LATEST_VERSION}"
+        echo "--- Setting up CI environment"
+        export HOME=/tmp/ci-home
+        echo "--- Running evaluation matrix"
         uv run python -m harness matrix \
           --tasks "evals/tasks/**/*.task.yaml" \
           --configs "evals/configs/*/config.yaml" \
@@ -114,10 +104,9 @@ steps:
     key: regression-pinned
     depends_on: eval-pinned
     commands:
-      - export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
-
-      - echo "--- Checking for regressions against baseline"
       - |
+        export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
+        echo "--- Checking for regressions against baseline"
         uv run python -c "
         import json
         import sys
@@ -163,10 +152,9 @@ steps:
       - eval-latest
     soft_fail: true
     commands:
-      - export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
-
-      - echo "--- Comparing latest vs pinned versions"
       - |
+        export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
+        echo "--- Comparing latest vs pinned versions"
         uv run python -c "
         import json
         from harness.runner import EvalRunner
@@ -210,12 +198,11 @@ steps:
     depends_on:
       - eval-pinned
     commands:
-      - export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
-
-      - echo "--- Generating summary report"
-      - uv run python -m harness report --results results/pinned-${BUILDKITE_BUILD_NUMBER}.json
-
-      - echo "--- Report saved"
+      - |
+        export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
+        echo "--- Generating summary report"
+        uv run python -m harness report --results results/pinned-${BUILDKITE_BUILD_NUMBER}.json
+        echo "--- Report saved"
     artifact_paths:
       - "results/*.json"
     plugins:
