@@ -1,0 +1,62 @@
+name: full
+description: Full configuration with skills, CLAUDE.md, and agents
+
+# Comprehensive project instructions
+claude_md: |
+  # Project Coding Standards
+
+  ## Code Style
+  - Use Python 3.11+ features
+  - Follow PEP 8 conventions
+  - Use type hints for all functions
+  - Keep functions small and focused
+  - Maximum line length: 100 characters
+
+  ## Error Handling
+  - Always handle exceptions explicitly
+  - Log errors with context
+  - Return meaningful error messages
+  - Use custom exception classes when appropriate
+
+  ## Testing
+  - Write tests for all new code
+  - Use pytest conventions
+  - Aim for >80% test coverage
+  - Write both unit and integration tests
+
+  ## Security
+  - Never log sensitive data (passwords, tokens, PII)
+  - Validate all input at boundaries
+  - Use parameterized queries for SQL
+  - Follow OWASP guidelines
+
+  ## Documentation
+  - Document all public APIs
+  - Include docstrings for complex functions
+  - Keep README up to date
+
+# Enable skills
+skills_path: ~/.claude/skills
+
+# Agent configurations
+agents_md: |
+  ## Available Agents
+
+  ### code-reviewer
+  Reviews code changes for quality, security, and best practices.
+  Use when: Making significant code changes
+
+  ### test-writer
+  Generates comprehensive test cases.
+  Use when: Adding new functionality that needs tests
+
+  ### debugger
+  Systematic debugging for errors and failures.
+  Use when: Encountering bugs or test failures
+
+# Model configuration
+model: claude-sonnet-4-5-20250514
+max_turns: 15
+
+# All tools available
+allowed_tools: all

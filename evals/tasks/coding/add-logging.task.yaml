@@ -1,0 +1,45 @@
+id: add-logging
+category: coding
+description: Add structured logging to API routes
+difficulty: easy
+
+prompt: |
+  Add structured logging to the API routes in src/api/routes.py. The logging
+  should:
+
+  1. Log all incoming requests with method, path, and client IP
+  2. Log response status codes and response times
+  3. Log errors with stack traces
+  4. Use structured JSON format for log entries
+  5. Include a request ID that can be used for tracing
+
+  Use Python's standard logging module. Create a logger configuration in
+  src/logging_config.py if needed.
+
+fixture_path: ../../fixtures/sample-project
+
+assertions:
+  - type: code
+    check: file_contains
+    file: "src/api/routes.py"
+    pattern: "(import logging|from logging|logger\\.|logging\\.)"
+  - type: code
+    check: file_contains
+    file: "src/api/routes.py"
+    pattern: "(request_id|trace_id|correlation_id)"
+  - type: llm
+    rubric: |
+      The logging implementation should:
+      - Use Python's standard logging module
+      - Log at appropriate levels (INFO for requests, ERROR for errors)
+      - Include useful context (method, path, status, duration)
+      - Use structured format (JSON preferred)
+      - Include request ID for tracing
+      - Not log sensitive data (passwords, tokens)
+
+scoring:
+  file_contains_logging: 30
+  file_contains_request_id: 20
+  llm_quality: 50
+
+timeout_seconds: 240

@@ -1,0 +1,40 @@
+name: claude-md-only
+description: Custom CLAUDE.md instructions without skills
+
+# Project-specific instructions
+claude_md: |
+  # Project Coding Standards
+
+  ## Code Style
+  - Use Python 3.11+ features
+  - Follow PEP 8 conventions
+  - Use type hints for all functions
+  - Keep functions small and focused
+
+  ## Error Handling
+  - Always handle exceptions explicitly
+  - Log errors with context
+  - Return meaningful error messages
+
+  ## Testing
+  - Write tests for all new code
+  - Use pytest conventions
+  - Aim for high test coverage
+
+  ## Security
+  - Never log sensitive data
+  - Validate all input
+  - Use parameterized queries for SQL
+
+# No skills
+skills_path: null
+
+# No agents
+agents_md: null
+
+# Model configuration
+model: claude-sonnet-4-5-20250514
+max_turns: 12
+
+# All tools available
+allowed_tools: all

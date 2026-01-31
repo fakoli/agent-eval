@@ -1,0 +1,37 @@
+id: fix-null-pointer
+category: coding
+description: Handle null user object in profile page endpoint
+difficulty: easy
+
+prompt: |
+  The /api/profile endpoint in src/api/routes.py crashes with a NullPointerError
+  when a user tries to access their profile but the user object is None
+  (e.g., after session expires or with invalid token).
+
+  Fix this bug by adding proper null checking and returning an appropriate
+  error response (401 Unauthorized) when the user is not found.
+
+fixture_path: ../../fixtures/sample-project
+
+assertions:
+  - type: code
+    check: tests_pass
+    command: "pytest tests/test_api.py::test_profile_null_user -v"
+  - type: code
+    check: file_contains
+    file: "src/api/routes.py"
+    pattern: "(user\\s*(is|==)\\s*None|if\\s+not\\s+user|user\\s+is\\s+None)"
+  - type: llm
+    rubric: |
+      The fix should:
+      - Check if user is None before accessing user properties
+      - Return 401 Unauthorized status code when user is None
+      - Include a meaningful error message in the response
+      - Not affect the normal flow when user is valid
+
+scoring:
+  tests_pass: 60
+  file_contains: 15
+  llm_quality: 25
+
+timeout_seconds: 180

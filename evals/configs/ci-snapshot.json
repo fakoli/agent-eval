@@ -1,0 +1,12 @@
+{
+  "claude_version": "1.0.31",
+  "snapshot_timestamp": "2026-01-31T00:00:00",
+  "global_claude_md": "# CI Evaluation Environment\n\n## Coding Standards\n- Use Python 3.11+ features\n- Follow PEP 8 conventions\n- Use type hints for all functions\n\n## Testing\n- Write tests for all new code\n- Use pytest conventions\n",
+  "settings": {
+    "analytics": false,
+    "telemetry": false
+  },
+  "mcp_servers": {},
+  "skills": {},
+  "source_machine": "ci-template"
+}

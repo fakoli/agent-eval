@@ -1,0 +1,24 @@
+name: baseline
+description: Minimal configuration - no skills, no custom CLAUDE.md
+
+# No CLAUDE.md content
+claude_md: null
+
+# No skills
+skills_path: null
+
+# No agents
+agents_md: null
+
+# Model configuration
+model: claude-sonnet-4-5-20250514
+max_turns: 10
+
+# Limited tools for baseline
+allowed_tools:
+  - Read
+  - Edit
+  - Write
+  - Bash
+  - Grep
+  - Glob

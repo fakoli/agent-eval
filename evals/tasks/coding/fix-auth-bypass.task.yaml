@@ -1,0 +1,40 @@
+id: fix-auth-bypass
+category: coding
+description: Fix authentication bypass vulnerability where empty passwords are accepted
+difficulty: medium
+
+prompt: |
+  There's a security vulnerability in src/auth.py where users can bypass
+  authentication by providing an empty password. The authenticate() function
+  doesn't properly validate that the password is non-empty before checking
+  credentials.
+
+  Find and fix this vulnerability. Make sure:
+  1. Empty passwords are rejected
+  2. An appropriate error message is returned
+  3. Existing tests still pass
+
+fixture_path: ../../fixtures/sample-project
+
+assertions:
+  - type: code
+    check: tests_pass
+    command: "pytest tests/test_auth.py -v"
+  - type: code
+    check: file_contains
+    file: "src/auth.py"
+    pattern: "len\\(password\\)|password\\s*==\\s*['\"]|not\\s+password"
+  - type: llm
+    rubric: |
+      The fix should:
+      - Validate that password is not empty or whitespace-only
+      - Return an appropriate error message for empty passwords
+      - Not break the existing authentication logic for valid passwords
+      - Handle edge cases like None password gracefully
+
+scoring:
+  tests_pass: 50
+  file_contains: 20
+  llm_quality: 30
+
+timeout_seconds: 300

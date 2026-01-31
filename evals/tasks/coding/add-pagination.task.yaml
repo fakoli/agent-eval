@@ -1,0 +1,44 @@
+id: add-pagination
+category: coding
+description: Add pagination to user list endpoint
+difficulty: medium
+
+prompt: |
+  The GET /api/users endpoint in src/api/routes.py currently returns all users
+  at once, which doesn't scale well. Add pagination support with the following
+  requirements:
+
+  1. Accept 'page' and 'per_page' query parameters
+  2. Default to page=1 and per_page=10
+  3. Return pagination metadata in the response:
+     - total: total number of users
+     - page: current page number
+     - per_page: items per page
+     - pages: total number of pages
+  4. Return the paginated users in a 'data' field
+
+fixture_path: ../../fixtures/sample-project
+
+assertions:
+  - type: code
+    check: tests_pass
+    command: "pytest tests/test_api.py::test_pagination -v"
+  - type: code
+    check: file_contains
+    file: "src/api/routes.py"
+    pattern: "(page|per_page|offset|limit)"
+  - type: llm
+    rubric: |
+      The implementation should:
+      - Accept page and per_page query parameters
+      - Handle invalid page/per_page values gracefully
+      - Calculate correct offset for database query
+      - Return correct pagination metadata
+      - Handle edge cases (empty results, page beyond range)
+
+scoring:
+  tests_pass: 50
+  file_contains: 15
+  llm_quality: 35
+
+timeout_seconds: 300

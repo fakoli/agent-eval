@@ -1,0 +1,43 @@
+id: find-entry-points
+category: exploration
+description: List all API endpoints in the codebase
+difficulty: easy
+
+prompt: |
+  Analyze the codebase and create a comprehensive list of all API endpoints.
+  For each endpoint, document:
+
+  1. HTTP method (GET, POST, PUT, DELETE, etc.)
+  2. URL path
+  3. Brief description of what it does
+  4. Required parameters (if any)
+  5. Authentication required (yes/no)
+
+  Create a file API_ENDPOINTS.md with your findings in a table format.
+
+fixture_path: ../../fixtures/sample-project
+
+assertions:
+  - type: code
+    check: file_exists
+    file: "API_ENDPOINTS.md"
+  - type: code
+    check: file_contains
+    file: "API_ENDPOINTS.md"
+    pattern: "(GET|POST|PUT|DELETE).*(/api/|/users|/auth)"
+  - type: llm
+    rubric: |
+      The documentation should:
+      - List all endpoints found in the codebase
+      - Include HTTP methods for each endpoint
+      - Describe what each endpoint does
+      - Identify which endpoints require authentication
+      - Be presented in a clear, readable table format
+      - Be complete (not miss any endpoints)
+
+scoring:
+  file_exists: 20
+  file_contains: 20
+  llm_quality: 60
+
+timeout_seconds: 240

@@ -1,0 +1,13 @@
+[project]
+name = "sample-project"
+version = "0.1.0"
+description = "Sample project for evaluation testing"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]

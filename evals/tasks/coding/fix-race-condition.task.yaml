@@ -1,0 +1,39 @@
+id: fix-race-condition
+category: coding
+description: Fix concurrent write issue in cache module
+difficulty: hard
+
+prompt: |
+  The cache module in src/cache.py has a race condition bug. When multiple
+  threads try to update the same cache key simultaneously, data can be lost
+  or corrupted because the read-modify-write operation is not atomic.
+
+  Fix this race condition by implementing proper thread synchronization.
+  You can use threading.Lock, threading.RLock, or another appropriate
+  synchronization primitive.
+
+fixture_path: ../../fixtures/sample-project
+
+assertions:
+  - type: code
+    check: tests_pass
+    command: "pytest tests/test_cache.py -v"
+  - type: code
+    check: file_contains
+    file: "src/cache.py"
+    pattern: "(threading\\.(R?Lock|Semaphore)|with\\s+self\\._?lock)"
+  - type: llm
+    rubric: |
+      The fix should:
+      - Use proper synchronization (Lock, RLock, or similar)
+      - Protect the critical section with the lock
+      - Not introduce deadlocks
+      - Maintain good performance (not over-synchronizing)
+      - Handle lock acquisition/release properly (preferably with context manager)
+
+scoring:
+  tests_pass: 50
+  file_contains: 20
+  llm_quality: 30
+
+timeout_seconds: 300

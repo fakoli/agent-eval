@@ -1,0 +1,46 @@
+id: explain-architecture
+category: exploration
+description: Describe the overall project architecture
+difficulty: medium
+
+prompt: |
+  Analyze the codebase and create a comprehensive architecture document.
+  Your documentation should cover:
+
+  1. Overall project structure and organization
+  2. Main components and their responsibilities
+  3. Data flow between components
+  4. External dependencies and their purposes
+  5. Design patterns used (if any)
+  6. Database schema overview (if applicable)
+
+  Create a file ARCHITECTURE.md with your analysis. Include diagrams
+  in ASCII art or Mermaid syntax where helpful.
+
+fixture_path: ../../fixtures/sample-project
+
+assertions:
+  - type: code
+    check: file_exists
+    file: "ARCHITECTURE.md"
+  - type: code
+    check: file_contains
+    file: "ARCHITECTURE.md"
+    pattern: "(src/|component|module|layer|├|└|\\[.*\\])"
+  - type: llm
+    rubric: |
+      The documentation should:
+      - Describe the overall project structure
+      - Identify main components/modules
+      - Explain how components interact
+      - List key dependencies and their purposes
+      - Identify design patterns where applicable
+      - Include helpful diagrams (ASCII or Mermaid)
+      - Be accurate about the actual codebase structure
+
+scoring:
+  file_exists: 20
+  file_contains: 15
+  llm_quality: 65
+
+timeout_seconds: 300

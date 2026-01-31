@@ -1,0 +1,44 @@
+id: find-auth-flow
+category: exploration
+description: Trace and document the authentication flow
+difficulty: medium
+
+prompt: |
+  Analyze the codebase and document the complete authentication flow.
+  Your documentation should cover:
+
+  1. Where authentication starts (entry points)
+  2. How credentials are validated
+  3. How sessions/tokens are created and managed
+  4. How protected routes verify authentication
+  5. How logout/session invalidation works
+
+  Create a file AUTHENTICATION.md in the root directory documenting
+  your findings with code references.
+
+fixture_path: ../../fixtures/sample-project
+
+assertions:
+  - type: code
+    check: file_exists
+    file: "AUTHENTICATION.md"
+  - type: code
+    check: file_contains
+    file: "AUTHENTICATION.md"
+    pattern: "(auth\\.py|authenticate|session|token)"
+  - type: llm
+    rubric: |
+      The documentation should:
+      - Identify the main authentication entry point
+      - Explain the credential validation process
+      - Describe session/token management
+      - List protected routes and how they verify auth
+      - Include relevant file and function references
+      - Be clear and well-organized
+
+scoring:
+  file_exists: 20
+  file_contains: 20
+  llm_quality: 60
+
+timeout_seconds: 300

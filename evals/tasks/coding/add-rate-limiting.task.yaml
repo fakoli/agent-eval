@@ -1,0 +1,47 @@
+id: add-rate-limiting
+category: coding
+description: Implement rate limiting middleware
+difficulty: medium
+
+prompt: |
+  Add rate limiting middleware to protect the API from abuse. Create a new
+  file src/middleware/rate_limiter.py that implements:
+
+  1. A RateLimiter class that tracks requests per client IP
+  2. Configurable rate limit (requests per minute)
+  3. Returns 429 Too Many Requests when limit exceeded
+  4. Include Retry-After header in 429 responses
+
+  The middleware should work with the existing Flask application.
+  Default limit should be 60 requests per minute.
+
+fixture_path: ../../fixtures/sample-project
+
+assertions:
+  - type: code
+    check: file_exists
+    file: "src/middleware/rate_limiter.py"
+  - type: code
+    check: file_contains
+    file: "src/middleware/rate_limiter.py"
+    pattern: "(RateLimiter|rate_limit)"
+  - type: code
+    check: file_contains
+    file: "src/middleware/rate_limiter.py"
+    pattern: "429|Too Many Requests"
+  - type: llm
+    rubric: |
+      The implementation should:
+      - Track requests by client IP address
+      - Use a sliding window or token bucket algorithm
+      - Be thread-safe for concurrent requests
+      - Clean up stale entries to prevent memory leaks
+      - Include proper error response with Retry-After header
+
+scoring:
+  file_exists: 20
+  file_contains_rate: 20
+  file_contains_429: 10
+  llm_quality: 50
+
+timeout_seconds: 300

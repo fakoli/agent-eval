@@ -1,0 +1,17 @@
+{
+  "pinned_version": "1.0.31",
+  "last_tested": "2026-01-31",
+  "tested_versions": [
+    {
+      "version": "1.0.31",
+      "pass_rate": 0.85,
+      "date": "2026-01-31",
+      "notes": "Initial baseline version"
+    }
+  ],
+  "upgrade_policy": {
+    "auto_upgrade": false,
+    "regression_threshold": 0.05,
+    "required_tests": ["fix-auth-bypass", "fix-null-pointer", "add-pagination"]
+  }
+}

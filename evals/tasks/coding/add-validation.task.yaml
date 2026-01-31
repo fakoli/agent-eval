@@ -1,0 +1,42 @@
+id: add-validation
+category: coding
+description: Add input validation to user registration form handler
+difficulty: easy
+
+prompt: |
+  The POST /api/users endpoint in src/api/routes.py accepts user registration
+  data but doesn't validate the input properly. Add validation for:
+
+  1. email: Must be a valid email format
+  2. password: Must be at least 8 characters with at least one number
+  3. username: Must be 3-20 alphanumeric characters
+
+  Return 400 Bad Request with descriptive error messages when validation fails.
+  Include all validation errors in the response, not just the first one.
+
+fixture_path: ../../fixtures/sample-project
+
+assertions:
+  - type: code
+    check: tests_pass
+    command: "pytest tests/test_api.py::test_user_validation -v"
+  - type: code
+    check: file_contains
+    file: "src/api/routes.py"
+    pattern: "(validate|@.*email|re\\.match|regex)"
+  - type: llm
+    rubric: |
+      The validation should:
+      - Validate email format using regex or email validator
+      - Check password length and numeric character requirement
+      - Validate username format and length
+      - Return all validation errors at once (not just first)
+      - Use appropriate HTTP status code (400)
+      - Include clear error messages for each field
+
+scoring:
+  tests_pass: 50
+  file_contains: 15
+  llm_quality: 35
+
+timeout_seconds: 240
