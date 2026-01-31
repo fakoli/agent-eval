@@ -1,16 +1,8 @@
 # Buildkite Pipeline for Claude Code Evaluation Harness
 #
-# This pipeline runs evaluations to test Claude Code configurations including
-# skills, CLAUDE.md settings, and model versions for regression detection.
-#
-# Key features:
-# - Dual-version testing: pinned stable + latest for early regression detection
-# - Configuration snapshot import for reproducible CI environments
-# - Parallel evaluation runs for efficiency
-# - Regression detection with configurable thresholds
+# Runs evaluations to test Claude Code configurations for regression detection.
 
 env:
-  # Pinned to a known-good stable version
   PINNED_VERSION: "1.0.31"
 
 steps:
@@ -19,16 +11,11 @@ steps:
   - label: ":gear: Setup Environment"
     key: setup
     commands:
-      - echo "--- Installing Python dependencies"
       - uv sync
-      - echo "--- Importing CI configuration"
       - uv run python -m harness import-config -s evals/configs/ci-snapshot.json -o /tmp/ci-home
-      - echo "--- Validating configuration"
       - ls -la /tmp/ci-home/.claude/
     artifact_paths:
       - "/tmp/ci-home/**/*"
-    secrets:
-      - ANTHROPIC_API_KEY
     plugins:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
@@ -40,14 +27,10 @@ steps:
     depends_on: setup
     parallelism: 4
     commands:
-      - echo "--- Installing Node.js and npm"
       - apt-get update && apt-get install -y nodejs npm
-      - echo "--- Installing Claude Code ${PINNED_VERSION}"
       - npm install -g @anthropic-ai/claude-code@${PINNED_VERSION}
       - claude --version
-      - echo "--- Setting up CI environment"
       - export HOME=/tmp/ci-home
-      - echo "--- Running evaluation matrix"
       - |
         uv run python -m harness matrix \
           --tasks "evals/tasks/**/*.task.yaml" \
@@ -71,17 +54,12 @@ steps:
     key: eval-latest
     depends_on: setup
     parallelism: 4
-    soft_fail: true  # Don't block on latest failures
+    soft_fail: true
     commands:
-      - echo "--- Installing Node.js and npm"
       - apt-get update && apt-get install -y nodejs npm
-      - echo "--- Installing Claude Code latest"
       - npm install -g @anthropic-ai/claude-code@latest
-      - LATEST_VERSION=$(claude --version | head -1)
-      - echo "Testing Claude Code ${LATEST_VERSION}"
-      - echo "--- Setting up CI environment"
+      - claude --version
       - export HOME=/tmp/ci-home
-      - echo "--- Running evaluation matrix"
       - |
         uv run python -m harness matrix \
           --tasks "evals/tasks/**/*.task.yaml" \
@@ -101,40 +79,31 @@ steps:
 
   # ==== Regression Detection ====
 
-  - label: ":chart_with_upwards_trend: Regression Check - Pinned vs Baseline"
+  - label: ":chart_with_upwards_trend: Regression Check"
     key: regression-pinned
     depends_on: eval-pinned
     commands:
-      - echo "--- Checking for regressions against baseline"
       - |
         uv run python -c "
-        import json
-        import sys
+        import json, sys
         from harness.runner import EvalRunner
         from harness.reporter import Reporter
 
         runner = EvalRunner()
         reporter = Reporter()
-
-        # Load results
         baseline = runner.load_results('results/golden-baseline.json')
         current = runner.load_results('results/pinned-${BUILDKITE_BUILD_NUMBER}.json')
-
-        # Check regression with 5% threshold
         has_regression, data = reporter.check_regression(baseline, current, threshold=0.05)
 
-        # Save comparison data
         with open('results/regression-report.json', 'w') as f:
             json.dump(data, f, indent=2)
 
-        # Report results
         if has_regression:
             print('REGRESSION DETECTED')
             for r in data['regressions']:
                 print(f\"  - {r['task_id']}: {r['baseline_pass_rate']:.0%} -> {r['current_pass_rate']:.0%}\")
             sys.exit(1)
-        else:
-            print('No regressions detected')
+        print('No regressions detected')
         "
     artifact_paths:
       - "results/regression-report.json"
@@ -147,14 +116,13 @@ steps:
             - ANTHROPIC_API_KEY
             - BUILDKITE_BUILD_NUMBER
 
-  - label: ":warning: Compare Latest vs Pinned"
+  - label: ":warning: Compare Versions"
     key: compare-versions
     depends_on:
       - eval-pinned
       - eval-latest
     soft_fail: true
     commands:
-      - echo "--- Comparing latest vs pinned versions"
       - |
         uv run python -c "
         import json
@@ -163,21 +131,15 @@ steps:
 
         runner = EvalRunner()
         reporter = Reporter()
-
-        # Load results
         pinned = runner.load_results('results/pinned-${BUILDKITE_BUILD_NUMBER}.json')
         latest = runner.load_results('results/latest-${BUILDKITE_BUILD_NUMBER}.json')
-
-        # Compare
         has_regression, data = reporter.check_regression(pinned, latest, threshold=0.05)
 
-        # Save comparison
         with open('results/version-diff.json', 'w') as f:
             json.dump(data, f, indent=2)
 
-        # Report
         if has_regression:
-            print('WARNING: Latest has regressions vs pinned - do not upgrade yet')
+            print('WARNING: Latest has regressions vs pinned')
             for r in data['regressions']:
                 print(f\"  - {r['task_id']}: {r['baseline_pass_rate']:.0%} -> {r['current_pass_rate']:.0%}\")
         else:
@@ -194,16 +156,13 @@ steps:
             - ANTHROPIC_API_KEY
             - BUILDKITE_BUILD_NUMBER
 
-  # ==== Report Generation ====
+  # ==== Report ====
 
   - label: ":bar_chart: Generate Report"
     key: report
-    depends_on:
-      - eval-pinned
+    depends_on: eval-pinned
     commands:
-      - echo "--- Generating summary report"
       - uv run python -m harness report --results results/pinned-${BUILDKITE_BUILD_NUMBER}.json
-      - echo "--- Report saved"
     artifact_paths:
       - "results/*.json"
     secrets:
