@@ -21,10 +21,6 @@ steps:
   - label: ":gear: Setup Environment"
     key: setup
     commands:
-      - echo "--- Installing uv"
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
-
       - echo "--- Installing Python dependencies"
       - uv sync
 
@@ -37,7 +33,7 @@ steps:
       - "/tmp/ci-home/**/*"
     plugins:
       - docker#v5.0.0:
-          image: "python:3.11-slim"
+          image: "ghcr.io/astral-sh/uv:debian"
           environment:
             - ANTHROPIC_API_KEY
 
@@ -48,9 +44,8 @@ steps:
     depends_on: setup
     parallelism: 4
     commands:
-      - echo "--- Installing uv"
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
+      - echo "--- Installing Node.js and npm"
+      - apt-get update && apt-get install -y nodejs npm
 
       - echo "--- Installing Claude Code ${PINNED_VERSION}"
       - npm install -g @anthropic-ai/claude-code@${PINNED_VERSION}
@@ -70,7 +65,7 @@ steps:
       - "results/pinned-*.json"
     plugins:
       - docker#v5.0.0:
-          image: "python:3.11-slim"
+          image: "ghcr.io/astral-sh/uv:debian"
           environment:
             - ANTHROPIC_API_KEY
             - BUILDKITE_BUILD_NUMBER
@@ -83,9 +78,8 @@ steps:
     parallelism: 4
     soft_fail: true  # Don't block on latest failures
     commands:
-      - echo "--- Installing uv"
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
+      - echo "--- Installing Node.js and npm"
+      - apt-get update && apt-get install -y nodejs npm
 
       - echo "--- Installing Claude Code latest"
       - npm install -g @anthropic-ai/claude-code@latest
@@ -106,7 +100,7 @@ steps:
       - "results/latest-*.json"
     plugins:
       - docker#v5.0.0:
-          image: "python:3.11-slim"
+          image: "ghcr.io/astral-sh/uv:debian"
           environment:
             - ANTHROPIC_API_KEY
             - BUILDKITE_BUILD_NUMBER
@@ -117,10 +111,6 @@ steps:
     key: regression-pinned
     depends_on: eval-pinned
     commands:
-      - echo "--- Installing uv"
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
-
       - echo "--- Checking for regressions against baseline"
       - |
         uv run python -c "
@@ -154,6 +144,12 @@ steps:
         "
     artifact_paths:
       - "results/regression-report.json"
+    plugins:
+      - docker#v5.0.0:
+          image: "ghcr.io/astral-sh/uv:debian"
+          environment:
+            - ANTHROPIC_API_KEY
+            - BUILDKITE_BUILD_NUMBER
 
   - label: ":warning: Compare Latest vs Pinned"
     key: compare-versions
@@ -162,10 +158,6 @@ steps:
       - eval-latest
     soft_fail: true
     commands:
-      - echo "--- Installing uv"
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
-
       - echo "--- Comparing latest vs pinned versions"
       - |
         uv run python -c "
@@ -197,6 +189,12 @@ steps:
         "
     artifact_paths:
       - "results/version-diff.json"
+    plugins:
+      - docker#v5.0.0:
+          image: "ghcr.io/astral-sh/uv:debian"
+          environment:
+            - ANTHROPIC_API_KEY
+            - BUILDKITE_BUILD_NUMBER
 
   # ==== Report Generation ====
 
@@ -205,13 +203,15 @@ steps:
     depends_on:
       - eval-pinned
     commands:
-      - echo "--- Installing uv"
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
-
       - echo "--- Generating summary report"
       - uv run python -m harness report --results results/pinned-${BUILDKITE_BUILD_NUMBER}.json
 
       - echo "--- Report saved"
     artifact_paths:
       - "results/*.json"
+    plugins:
+      - docker#v5.0.0:
+          image: "ghcr.io/astral-sh/uv:debian"
+          environment:
+            - ANTHROPIC_API_KEY
+            - BUILDKITE_BUILD_NUMBER
