@@ -1,33 +1,31 @@
 # Scheduled Pipeline Configuration for Claude Code Eval Harness
 #
-# Defines automated schedules for running evaluations:
-# - Daily smoke tests with pinned version only
-# - Weekly full matrix tests with both versions
+# DISABLED: Schedules disabled to reduce costs. Uncomment to re-enable.
 
-schedules:
-  # Daily lightweight smoke test
-  - name: "Daily Smoke Test"
-    schedule: "0 6 * * *"  # 6 AM UTC daily
-    branch: main
-    env:
-      EVAL_MODE: smoke
-      TEST_LATEST: "false"
-    message: "Daily smoke test - pinned version only"
+schedules: []
 
-  # Weekly comprehensive test
-  - name: "Weekly Full Matrix"
-    schedule: "0 2 * * 0"  # 2 AM UTC every Sunday
-    branch: main
-    env:
-      EVAL_MODE: full
-      TEST_LATEST: "true"
-    message: "Weekly full matrix - both versions"
-
-  # Monthly regression baseline update
-  - name: "Monthly Baseline Refresh"
-    schedule: "0 3 1 * *"  # 3 AM UTC on the 1st of each month
-    branch: main
-    env:
-      EVAL_MODE: baseline
-      UPDATE_BASELINE: "true"
-    message: "Monthly baseline refresh"
+# ==== DISABLED SCHEDULES ====
+#
+#   - name: "Daily Smoke Test"
+#     schedule: "0 6 * * *"  # 6 AM UTC daily
+#     branch: main
+#     env:
+#       EVAL_MODE: smoke
+#       TEST_LATEST: "false"
+#     message: "Daily smoke test - pinned version only"
+#
+#   - name: "Weekly Full Matrix"
+#     schedule: "0 2 * * 0"  # 2 AM UTC every Sunday
+#     branch: main
+#     env:
+#       EVAL_MODE: full
+#       TEST_LATEST: "true"
+#     message: "Weekly full matrix - both versions"
+#
+#   - name: "Monthly Baseline Refresh"
+#     schedule: "0 3 1 * *"  # 3 AM UTC on the 1st of each month
+#     branch: main
+#     env:
+#       EVAL_MODE: baseline
+#       UPDATE_BASELINE: "true"
+#     message: "Monthly baseline refresh"
