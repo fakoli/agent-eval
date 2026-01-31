@@ -34,6 +34,7 @@ steps:
     plugins:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
+          mount-buildkite-agent: true
 
   # ==== Pinned Version Tests (Must Pass) ====
 
@@ -66,6 +67,7 @@ steps:
     plugins:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
+          mount-buildkite-agent: true
           environment:
             - BUILDKITE_BUILD_NUMBER
 
@@ -102,6 +104,7 @@ steps:
     plugins:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
+          mount-buildkite-agent: true
           environment:
             - BUILDKITE_BUILD_NUMBER
 
@@ -149,6 +152,7 @@ steps:
     plugins:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
+          mount-buildkite-agent: true
           environment:
             - BUILDKITE_BUILD_NUMBER
 
@@ -195,6 +199,7 @@ steps:
     plugins:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
+          mount-buildkite-agent: true
           environment:
             - BUILDKITE_BUILD_NUMBER
 
@@ -216,5 +221,6 @@ steps:
     plugins:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
+          mount-buildkite-agent: true
           environment:
             - BUILDKITE_BUILD_NUMBER
