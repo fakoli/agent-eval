@@ -12,8 +12,6 @@
 env:
   # Pinned to a known-good stable version
   PINNED_VERSION: "1.0.31"
-  # API key should be set in Buildkite secrets
-  ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
 
 steps:
   # ==== Setup Phase ====
@@ -21,6 +19,8 @@ steps:
   - label: ":gear: Setup Environment"
     key: setup
     commands:
+      - export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
+
       - echo "--- Installing Python dependencies"
       - uv sync
 
@@ -34,8 +34,6 @@ steps:
     plugins:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
-          environment:
-            - ANTHROPIC_API_KEY
 
   # ==== Pinned Version Tests (Must Pass) ====
 
@@ -44,6 +42,8 @@ steps:
     depends_on: setup
     parallelism: 4
     commands:
+      - export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
+
       - echo "--- Installing Node.js and npm"
       - apt-get update && apt-get install -y nodejs npm
 
@@ -67,7 +67,6 @@ steps:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
           environment:
-            - ANTHROPIC_API_KEY
             - BUILDKITE_BUILD_NUMBER
 
   # ==== Latest Version Tests (Informational) ====
@@ -78,6 +77,8 @@ steps:
     parallelism: 4
     soft_fail: true  # Don't block on latest failures
     commands:
+      - export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
+
       - echo "--- Installing Node.js and npm"
       - apt-get update && apt-get install -y nodejs npm
 
@@ -102,7 +103,6 @@ steps:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
           environment:
-            - ANTHROPIC_API_KEY
             - BUILDKITE_BUILD_NUMBER
 
   # ==== Regression Detection ====
@@ -111,6 +111,8 @@ steps:
     key: regression-pinned
     depends_on: eval-pinned
     commands:
+      - export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
+
       - echo "--- Checking for regressions against baseline"
       - |
         uv run python -c "
@@ -148,7 +150,6 @@ steps:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
           environment:
-            - ANTHROPIC_API_KEY
             - BUILDKITE_BUILD_NUMBER
 
   - label: ":warning: Compare Latest vs Pinned"
@@ -158,6 +159,8 @@ steps:
       - eval-latest
     soft_fail: true
     commands:
+      - export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
+
       - echo "--- Comparing latest vs pinned versions"
       - |
         uv run python -c "
@@ -193,7 +196,6 @@ steps:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
           environment:
-            - ANTHROPIC_API_KEY
             - BUILDKITE_BUILD_NUMBER
 
   # ==== Report Generation ====
@@ -203,6 +205,8 @@ steps:
     depends_on:
       - eval-pinned
     commands:
+      - export ANTHROPIC_API_KEY=$(buildkite-agent secret get ANTHROPIC_API_KEY)
+
       - echo "--- Generating summary report"
       - uv run python -m harness report --results results/pinned-${BUILDKITE_BUILD_NUMBER}.json
 
@@ -213,5 +217,4 @@ steps:
       - docker#v5.0.0:
           image: "ghcr.io/astral-sh/uv:debian"
           environment:
-            - ANTHROPIC_API_KEY
             - BUILDKITE_BUILD_NUMBER
