@@ -1,6 +1,7 @@
 """Environment isolation for evaluation runs."""
 
 import difflib
+import fnmatch
 import json
 import shutil
 import tarfile
@@ -378,9 +379,16 @@ class EnvironmentIsolator:
             ]
 
         def filter_func(tarinfo):
-            """Filter out excluded patterns."""
+            """Filter out excluded patterns using proper pattern matching."""
+            # Check each path component for pattern matches
+            path_parts = Path(tarinfo.name).parts
             for pattern in exclude_patterns:
-                if pattern in tarinfo.name:
+                # Check if any path part matches the pattern
+                for part in path_parts:
+                    if fnmatch.fnmatch(part, pattern):
+                        return None
+                # Also check the full path for patterns like .git
+                if fnmatch.fnmatch(tarinfo.name, pattern) or fnmatch.fnmatch(tarinfo.name, f"*/{pattern}") or fnmatch.fnmatch(tarinfo.name, f"*/{pattern}/*"):
                     return None
             return tarinfo
 

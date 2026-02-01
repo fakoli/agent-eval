@@ -3,7 +3,7 @@
 # Entrypoint script for agent-eval container
 # Runs Claude Code evaluation and captures output
 
-set -e
+set -eo pipefail
 
 # Configuration from environment
 PROMPT_FILE="${PROMPT_FILE:-/workspace/prompt.txt}"
@@ -36,6 +36,7 @@ echo "Max turns: $MAX_TURNS"
 echo "Working directory: $(pwd)"
 
 # Execute Claude with JSON output
+# Use PIPESTATUS to capture the exit code of claude, not tee
 claude \
     -p "$PROMPT" \
     --model "$MODEL" \
@@ -45,8 +46,8 @@ claude \
     --no-session-persistence \
     2>&1 | tee "$OUTPUT_FILE"
 
-# Capture exit code
-EXIT_CODE=$?
+# Capture exit code from claude command (first command in pipeline)
+EXIT_CODE=${PIPESTATUS[0]}
 
 # Check if output is valid JSON
 if ! jq -e . "$OUTPUT_FILE" > /dev/null 2>&1; then
