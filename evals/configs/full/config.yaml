@@ -55,7 +55,7 @@ agents_md: |
   Use when: Encountering bugs or test failures
 
 # Model configuration
-model: claude-sonnet-4-5-20250514
+model: claude-sonnet-4-20250514
 max_turns: 15
 
 # All tools available

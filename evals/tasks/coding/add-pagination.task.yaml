@@ -17,7 +17,7 @@ prompt: |
      - pages: total number of pages
   4. Return the paginated users in a 'data' field
 
-fixture_path: ../../fixtures/sample-project
+fixture_path: ../../../fixtures/sample-project
 
 assertions:
   - type: code

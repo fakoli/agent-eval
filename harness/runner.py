@@ -339,7 +339,7 @@ class EvalRunner:
             claude_md=data.get("claude_md"),
             skills_path=Path(data["skills_path"]) if data.get("skills_path") else None,
             agents_md=data.get("agents_md"),
-            model=data.get("model", "claude-sonnet-4-5-20250514"),
+            model=data.get("model", "claude-sonnet-4-20250514"),
             max_turns=data.get("max_turns", 10),
             allowed_tools=data.get("allowed_tools", "all"),
         )

@@ -11,7 +11,7 @@ prompt: |
   Fix this bug by adding proper null checking and returning an appropriate
   error response (401 Unauthorized) when the user is not found.
 
-fixture_path: ../../fixtures/sample-project
+fixture_path: ../../../fixtures/sample-project
 
 assertions:
   - type: code

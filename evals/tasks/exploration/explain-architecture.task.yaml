@@ -17,7 +17,7 @@ prompt: |
   Create a file ARCHITECTURE.md with your analysis. Include diagrams
   in ASCII art or Mermaid syntax where helpful.
 
-fixture_path: ../../fixtures/sample-project
+fixture_path: ../../../fixtures/sample-project
 
 assertions:
   - type: code

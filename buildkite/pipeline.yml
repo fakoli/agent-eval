@@ -1,217 +1,170 @@
 # Buildkite Pipeline for Claude Code Evaluation Harness
 #
-# This pipeline runs evaluations to test Claude Code configurations including
-# skills, CLAUDE.md settings, and model versions for regression detection.
-#
-# Key features:
-# - Dual-version testing: pinned stable + latest for early regression detection
-# - Configuration snapshot import for reproducible CI environments
-# - Parallel evaluation runs for efficiency
-# - Regression detection with configurable thresholds
+# DISABLED: Pipeline disabled to reduce costs. Uncomment steps to re-enable.
 
 env:
-  # Pinned to a known-good stable version
   PINNED_VERSION: "1.0.31"
-  # API key should be set in Buildkite secrets
-  ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
 
 steps:
-  # ==== Setup Phase ====
+  - label: ":no_entry: Pipeline Disabled"
+    command: echo "Pipeline disabled to reduce costs. Edit buildkite/pipeline.yml to re-enable."
 
-  - label: ":gear: Setup Environment"
-    key: setup
-    commands:
-      - echo "--- Installing uv"
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
-
-      - echo "--- Installing Python dependencies"
-      - uv sync
-
-      - echo "--- Importing CI configuration"
-      - uv run python -m harness import-config -s evals/configs/ci-snapshot.json -o /tmp/ci-home
-
-      - echo "--- Validating configuration"
-      - ls -la /tmp/ci-home/.claude/
-    artifact_paths:
-      - "/tmp/ci-home/**/*"
-    plugins:
-      - docker#v5.0.0:
-          image: "python:3.11-slim"
-          environment:
-            - ANTHROPIC_API_KEY
-
-  # ==== Pinned Version Tests (Must Pass) ====
-
-  - label: ":lock: Eval - Pinned v${PINNED_VERSION}"
-    key: eval-pinned
-    depends_on: setup
-    parallelism: 4
-    commands:
-      - echo "--- Installing uv"
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
-
-      - echo "--- Installing Claude Code ${PINNED_VERSION}"
-      - npm install -g @anthropic-ai/claude-code@${PINNED_VERSION}
-      - claude --version
-
-      - echo "--- Setting up CI environment"
-      - export HOME=/tmp/ci-home
-
-      - echo "--- Running evaluation matrix"
-      - |
-        uv run python -m harness matrix \
-          --tasks "evals/tasks/**/*.task.yaml" \
-          --configs "evals/configs/*/config.yaml" \
-          --runs 3 \
-          --output results/pinned-${BUILDKITE_BUILD_NUMBER}.json
-    artifact_paths:
-      - "results/pinned-*.json"
-    plugins:
-      - docker#v5.0.0:
-          image: "python:3.11-slim"
-          environment:
-            - ANTHROPIC_API_KEY
-            - BUILDKITE_BUILD_NUMBER
-
-  # ==== Latest Version Tests (Informational) ====
-
-  - label: ":rocket: Eval - Latest"
-    key: eval-latest
-    depends_on: setup
-    parallelism: 4
-    soft_fail: true  # Don't block on latest failures
-    commands:
-      - echo "--- Installing uv"
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
-
-      - echo "--- Installing Claude Code latest"
-      - npm install -g @anthropic-ai/claude-code@latest
-      - LATEST_VERSION=$(claude --version | head -1)
-      - echo "Testing Claude Code ${LATEST_VERSION}"
-
-      - echo "--- Setting up CI environment"
-      - export HOME=/tmp/ci-home
-
-      - echo "--- Running evaluation matrix"
-      - |
-        uv run python -m harness matrix \
-          --tasks "evals/tasks/**/*.task.yaml" \
-          --configs "evals/configs/*/config.yaml" \
-          --runs 3 \
-          --output results/latest-${BUILDKITE_BUILD_NUMBER}.json
-    artifact_paths:
-      - "results/latest-*.json"
-    plugins:
-      - docker#v5.0.0:
-          image: "python:3.11-slim"
-          environment:
-            - ANTHROPIC_API_KEY
-            - BUILDKITE_BUILD_NUMBER
-
-  # ==== Regression Detection ====
-
-  - label: ":chart_with_upwards_trend: Regression Check - Pinned vs Baseline"
-    key: regression-pinned
-    depends_on: eval-pinned
-    commands:
-      - echo "--- Installing uv"
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
-
-      - echo "--- Checking for regressions against baseline"
-      - |
-        uv run python -c "
-        import json
-        import sys
-        from harness.runner import EvalRunner
-        from harness.reporter import Reporter
-
-        runner = EvalRunner()
-        reporter = Reporter()
-
-        # Load results
-        baseline = runner.load_results('results/golden-baseline.json')
-        current = runner.load_results('results/pinned-${BUILDKITE_BUILD_NUMBER}.json')
-
-        # Check regression with 5% threshold
-        has_regression, data = reporter.check_regression(baseline, current, threshold=0.05)
-
-        # Save comparison data
-        with open('results/regression-report.json', 'w') as f:
-            json.dump(data, f, indent=2)
-
-        # Report results
-        if has_regression:
-            print('REGRESSION DETECTED')
-            for r in data['regressions']:
-                print(f\"  - {r['task_id']}: {r['baseline_pass_rate']:.0%} -> {r['current_pass_rate']:.0%}\")
-            sys.exit(1)
-        else:
-            print('No regressions detected')
-        "
-    artifact_paths:
-      - "results/regression-report.json"
-
-  - label: ":warning: Compare Latest vs Pinned"
-    key: compare-versions
-    depends_on:
-      - eval-pinned
-      - eval-latest
-    soft_fail: true
-    commands:
-      - echo "--- Installing uv"
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
-
-      - echo "--- Comparing latest vs pinned versions"
-      - |
-        uv run python -c "
-        import json
-        from harness.runner import EvalRunner
-        from harness.reporter import Reporter
-
-        runner = EvalRunner()
-        reporter = Reporter()
-
-        # Load results
-        pinned = runner.load_results('results/pinned-${BUILDKITE_BUILD_NUMBER}.json')
-        latest = runner.load_results('results/latest-${BUILDKITE_BUILD_NUMBER}.json')
-
-        # Compare
-        has_regression, data = reporter.check_regression(pinned, latest, threshold=0.05)
-
-        # Save comparison
-        with open('results/version-diff.json', 'w') as f:
-            json.dump(data, f, indent=2)
-
-        # Report
-        if has_regression:
-            print('WARNING: Latest has regressions vs pinned - do not upgrade yet')
-            for r in data['regressions']:
-                print(f\"  - {r['task_id']}: {r['baseline_pass_rate']:.0%} -> {r['current_pass_rate']:.0%}\")
-        else:
-            print('Latest is safe to upgrade')
-        "
-    artifact_paths:
-      - "results/version-diff.json"
-
-  # ==== Report Generation ====
-
-  - label: ":bar_chart: Generate Report"
-    key: report
-    depends_on:
-      - eval-pinned
-    commands:
-      - echo "--- Installing uv"
-      - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - export PATH="$HOME/.local/bin:$PATH"
-
-      - echo "--- Generating summary report"
-      - uv run python -m harness report --results results/pinned-${BUILDKITE_BUILD_NUMBER}.json
-
-      - echo "--- Report saved"
-    artifact_paths:
-      - "results/*.json"
+# ==== DISABLED STEPS ====
+#
+#   - label: ":gear: Setup Environment"
+#     key: setup
+#     commands:
+#       - uv sync
+#       - uv run python -m harness import-config -s evals/configs/ci-snapshot.json -o /tmp/ci-home
+#       - ls -la /tmp/ci-home/.claude/
+#     artifact_paths:
+#       - "/tmp/ci-home/**/*"
+#     plugins:
+#       - docker#v5.0.0:
+#           image: "ghcr.io/astral-sh/uv:debian"
+#
+#   - label: ":lock: Eval - Pinned v${PINNED_VERSION}"
+#     key: eval-pinned
+#     depends_on: setup
+#     parallelism: 4
+#     commands:
+#       - apt-get update && apt-get install -y nodejs npm
+#       - npm install -g @anthropic-ai/claude-code@${PINNED_VERSION}
+#       - claude --version
+#       - export HOME=/tmp/ci-home
+#       - |
+#         uv run python -m harness matrix \
+#           --tasks "evals/tasks/**/*.task.yaml" \
+#           --configs "evals/configs/*/config.yaml" \
+#           --runs 3 \
+#           --output results/pinned-${BUILDKITE_BUILD_NUMBER}.json
+#     artifact_paths:
+#       - "results/pinned-*.json"
+#     secrets:
+#       - ANTHROPIC_API_KEY
+#     plugins:
+#       - docker#v5.0.0:
+#           image: "ghcr.io/astral-sh/uv:debian"
+#           environment:
+#             - ANTHROPIC_API_KEY
+#             - BUILDKITE_BUILD_NUMBER
+#
+#   - label: ":rocket: Eval - Latest"
+#     key: eval-latest
+#     depends_on: setup
+#     parallelism: 4
+#     soft_fail: true
+#     commands:
+#       - apt-get update && apt-get install -y nodejs npm
+#       - npm install -g @anthropic-ai/claude-code@latest
+#       - claude --version
+#       - export HOME=/tmp/ci-home
+#       - |
+#         uv run python -m harness matrix \
+#           --tasks "evals/tasks/**/*.task.yaml" \
+#           --configs "evals/configs/*/config.yaml" \
+#           --runs 3 \
+#           --output results/latest-${BUILDKITE_BUILD_NUMBER}.json
+#     artifact_paths:
+#       - "results/latest-*.json"
+#     secrets:
+#       - ANTHROPIC_API_KEY
+#     plugins:
+#       - docker#v5.0.0:
+#           image: "ghcr.io/astral-sh/uv:debian"
+#           environment:
+#             - ANTHROPIC_API_KEY
+#             - BUILDKITE_BUILD_NUMBER
+#
+#   - label: ":chart_with_upwards_trend: Regression Check"
+#     key: regression-pinned
+#     depends_on: eval-pinned
+#     commands:
+#       - |
+#         uv run python -c "
+#         import json, sys
+#         from harness.runner import EvalRunner
+#         from harness.reporter import Reporter
+#
+#         runner = EvalRunner()
+#         reporter = Reporter()
+#         baseline = runner.load_results('results/golden-baseline.json')
+#         current = runner.load_results('results/pinned-${BUILDKITE_BUILD_NUMBER}.json')
+#         has_regression, data = reporter.check_regression(baseline, current, threshold=0.05)
+#
+#         with open('results/regression-report.json', 'w') as f:
+#             json.dump(data, f, indent=2)
+#
+#         if has_regression:
+#             print('REGRESSION DETECTED')
+#             for r in data['regressions']:
+#                 print(f\"  - {r['task_id']}: {r['baseline_pass_rate']:.0%} -> {r['current_pass_rate']:.0%}\")
+#             sys.exit(1)
+#         print('No regressions detected')
+#         "
+#     artifact_paths:
+#       - "results/regression-report.json"
+#     secrets:
+#       - ANTHROPIC_API_KEY
+#     plugins:
+#       - docker#v5.0.0:
+#           image: "ghcr.io/astral-sh/uv:debian"
+#           environment:
+#             - ANTHROPIC_API_KEY
+#             - BUILDKITE_BUILD_NUMBER
+#
+#   - label: ":warning: Compare Versions"
+#     key: compare-versions
+#     depends_on:
+#       - eval-pinned
+#       - eval-latest
+#     soft_fail: true
+#     commands:
+#       - |
+#         uv run python -c "
+#         import json
+#         from harness.runner import EvalRunner
+#         from harness.reporter import Reporter
+#
+#         runner = EvalRunner()
+#         reporter = Reporter()
+#         pinned = runner.load_results('results/pinned-${BUILDKITE_BUILD_NUMBER}.json')
+#         latest = runner.load_results('results/latest-${BUILDKITE_BUILD_NUMBER}.json')
+#         has_regression, data = reporter.check_regression(pinned, latest, threshold=0.05)
+#
+#         with open('results/version-diff.json', 'w') as f:
+#             json.dump(data, f, indent=2)
+#
+#         if has_regression:
+#             print('WARNING: Latest has regressions vs pinned')
+#             for r in data['regressions']:
+#                 print(f\"  - {r['task_id']}: {r['baseline_pass_rate']:.0%} -> {r['current_pass_rate']:.0%}\")
+#         else:
+#             print('Latest is safe to upgrade')
+#         "
+#     artifact_paths:
+#       - "results/version-diff.json"
+#     secrets:
+#       - ANTHROPIC_API_KEY
+#     plugins:
+#       - docker#v5.0.0:
+#           image: "ghcr.io/astral-sh/uv:debian"
+#           environment:
+#             - ANTHROPIC_API_KEY
+#             - BUILDKITE_BUILD_NUMBER
+#
+#   - label: ":bar_chart: Generate Report"
+#     key: report
+#     depends_on: eval-pinned
+#     commands:
+#       - uv run python -m harness report --results results/pinned-${BUILDKITE_BUILD_NUMBER}.json
+#     artifact_paths:
+#       - "results/*.json"
+#     secrets:
+#       - ANTHROPIC_API_KEY
+#     plugins:
+#       - docker#v5.0.0:
+#           image: "ghcr.io/astral-sh/uv:debian"
+#           environment:
+#             - ANTHROPIC_API_KEY
+#             - BUILDKITE_BUILD_NUMBER

@@ -46,6 +46,7 @@ class ClaudeExecutor(Executor):
         claude_path: str = "claude",
         ci_mode: bool = False,
         mcp_config_path: Path | None = None,
+        skip_permissions: bool = True,
     ):
         """Initialize executor.
 
@@ -53,10 +54,12 @@ class ClaudeExecutor(Executor):
             claude_path: Path to claude CLI executable
             ci_mode: Whether running in CI mode (adds isolation flags)
             mcp_config_path: Optional path to MCP config file for CI
+            skip_permissions: Skip permission checks for automated execution
         """
         self.claude_path = claude_path
         self.ci_mode = ci_mode
         self.mcp_config_path = mcp_config_path
+        self.skip_permissions = skip_permissions
 
     def run(
         self,
@@ -126,6 +129,10 @@ class ClaudeExecutor(Executor):
             "--max-turns",
             str(config.max_turns),
         ]
+
+        # Skip permission checks for automated execution
+        if self.skip_permissions:
+            cmd.append("--dangerously-skip-permissions")
 
         # CI isolation flags
         if self.ci_mode:

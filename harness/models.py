@@ -107,7 +107,7 @@ class Config(BaseModel):
     claude_md: str | None = None
     skills_path: Path | None = None
     agents_md: str | None = None
-    model: str = "claude-sonnet-4-5-20250514"
+    model: str = "claude-sonnet-4-20250514"
     max_turns: int = 10
     allowed_tools: list[str] | Literal["all"] = "all"
 

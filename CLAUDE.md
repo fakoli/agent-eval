@@ -1,107 +1,49 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working in this repository.
 
 ## Project: agent-eval
 
-CI evaluation harness for multi-agent development environments. Detects behavioral regressions when agent instruction files (CLAUDE.md, skills, etc.) change.
+CI evaluation harness for testing Claude Code configurations. Detects behavioral regressions when agent instruction files change.
 
-## Build and Run Commands
+## Commands
 
 ```bash
-# Install dependencies
+# Setup
 uv sync
 
-# Run CLI commands
-uv run python -m harness --help
+# Run evaluations
+uv run python -m harness run --task evals/tasks/coding/fix-auth-bypass.task.yaml --config evals/configs/full/config.yaml
+uv run python -m harness matrix --tasks "evals/tasks/**/*.task.yaml" --configs "evals/configs/*/config.yaml" --runs 3
 
-# Validate task/config files
+# Validate files
 uv run python -m harness validate-task -t evals/tasks/coding/fix-auth-bypass.task.yaml
 uv run python -m harness validate-config -c evals/configs/full/config.yaml
 
-# Run single evaluation
-uv run python -m harness run \
-  --task evals/tasks/coding/fix-auth-bypass.task.yaml \
-  --config evals/configs/full/config.yaml
+# Tests
+uv run pytest                                      # Harness tests
+cd fixtures/sample-project && uv run pytest tests/ # Fixture tests
 
-# Run full matrix evaluation
-uv run python -m harness matrix \
-  --tasks "evals/tasks/**/*.task.yaml" \
-  --configs "evals/configs/*/config.yaml" \
-  --runs 3
-
-# Check environment status (API keys loaded)
+# Environment
 uv run python -m harness --env-file ~/.env env-status
-
-# Run tests for the harness itself
-uv run pytest
-
-# Run a single test file
-uv run pytest tests/test_runner.py
-
-# Run a single test function
-uv run pytest tests/test_runner.py::test_load_task -v
-
-# Run tests for the sample-project fixture
-cd fixtures/sample-project && uv run pytest tests/
-
-# Export Claude config for CI
-uv run python -m harness export-config -o evals/configs/ci-snapshot.json
-
-# Import config in CI environment
-uv run python -m harness import-config -s evals/configs/ci-snapshot.json -o /tmp/ci-home
 ```
 
 ## Architecture
 
-This is an evaluation harness that tests Claude Code configurations by running tasks and grading the results. See `docs/ARCHITECTURE.md` for full technical documentation.
+See `docs/ARCHITECTURE.md` for full technical documentation.
 
-### Core Flow
+**Core flow:** Task loading → Environment isolation → Claude CLI execution → Grading → Reporting
 
-1. **Task Loading** (`runner.py`) - Load `.task.yaml` files defining prompts and assertions
-2. **Environment Isolation** (`isolator.py`) - Create temp directory with fixture code and injected CLAUDE.md
-3. **Execution** (`executor.py`) - Run Claude Code CLI with the prompt, capture JSON output
-4. **Grading** (`graders/`) - Evaluate results against code assertions (tests pass, file contains) and LLM rubrics
-5. **Reporting** (`reporter.py`) - Aggregate results, detect regressions, output tables
+**Key files:** `runner.py`, `isolator.py`, `executor.py`, `graders/`
 
-### Key Abstractions
+## Known Issues
 
-- **`Executor`** (ABC) - Base class for execution backends. `ClaudeExecutor` wraps the Claude Code CLI. Designed for future `CursorExecutor` extension.
-- **`CompositeGrader`** - Combines `CodeGrader` (objective checks) and `LLMGrader` (rubric evaluation via `claude-haiku-4-5-20250514`) with weighted scoring.
-- **`EnvironmentIsolator`** - Creates isolated temp directories per run, copies fixtures, injects CLAUDE.md/skills.
+**Fixture venv paths:** If you relocate this project, `fixtures/sample-project/.venv/bin/pytest` contains a hardcoded shebang path that will break. Recreate the venv or fix the shebang.
 
-### Configuration Variants
+**Stale bytecode:** After moving the project, delete `__pycache__` directories to avoid import errors from stale `.pyc` files with embedded paths.
 
-Four config presets in `evals/configs/` test different Claude Code setups:
-- `baseline` - No skills, no CLAUDE.md (control group)
-- `skills-only` - Skills enabled, no custom instructions
-- `claude-md-only` - Custom instructions, no skills
-- `full` - Everything enabled
-
-### Task Categories
-
-Tasks in `evals/tasks/` are organized by type:
-- `coding/` - Bug fixes (`fix-*`) and feature implementations (`add-*`)
-- `exploration/` - Codebase analysis tasks (`find-*`, `explain-*`)
-
-### Fixture Project
-
-`fixtures/sample-project/` is a Flask API with intentional bugs:
-- `src/auth.py` - Empty password bypass bug
-- `src/cache.py` - Race condition in increment/get_or_set
-- `src/api/routes.py` - Null pointer bug, missing pagination/validation
-
-Tests in `fixtures/sample-project/tests/` are designed to fail until bugs are fixed.
+**Model name hardcoding:** The grading model is hardcoded in `harness/graders/llm_graders.py` and `harness/graders/composite_grader.py`. Update if using a different model.
 
 ## Environment Variables
 
-Load from `~/.env` using `--env-file`:
-- `ANTHROPIC_API_KEY` - Required for LLM grading (uses Haiku)
-
-<claude-mem-context>
-# Recent Activity
-
-<!-- This section is auto-generated by claude-mem. Edit content outside the tags. -->
-
-*No recent activity*
-</claude-mem-context>
+`ANTHROPIC_API_KEY` - Required for LLM grading. Load with `--env-file ~/.env`.
