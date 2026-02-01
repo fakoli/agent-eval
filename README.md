@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/banner.png" alt="agent-eval banner" width="100%">
+</p>
+
 # agent-eval
 
 **CI evaluation harness for multi-agent development environments.**
