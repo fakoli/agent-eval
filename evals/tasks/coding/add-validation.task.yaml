@@ -14,7 +14,7 @@ prompt: |
   Return 400 Bad Request with descriptive error messages when validation fails.
   Include all validation errors in the response, not just the first one.
 
-fixture_path: ../../fixtures/sample-project
+fixture_path: ../../../fixtures/sample-project
 
 assertions:
   - type: code

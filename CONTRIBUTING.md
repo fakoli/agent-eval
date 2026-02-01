@@ -154,7 +154,7 @@ claude_md: |
 skills_path: ~/.claude/skills  # or null
 agents_md: null  # or agent definitions
 
-model: claude-sonnet-4-5-20250514
+model: claude-sonnet-4-20250514
 max_turns: 15
 allowed_tools: all  # or list of specific tools
 ```

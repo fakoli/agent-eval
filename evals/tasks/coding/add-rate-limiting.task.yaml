@@ -15,7 +15,7 @@ prompt: |
   The middleware should work with the existing Flask application.
   Default limit should be 60 requests per minute.
 
-fixture_path: ../../fixtures/sample-project
+fixture_path: ../../../fixtures/sample-project
 
 assertions:
   - type: code

@@ -16,7 +16,7 @@ prompt: |
   Use Python's standard logging module. Create a logger configuration in
   src/logging_config.py if needed.
 
-fixture_path: ../../fixtures/sample-project
+fixture_path: ../../../fixtures/sample-project
 
 assertions:
   - type: code

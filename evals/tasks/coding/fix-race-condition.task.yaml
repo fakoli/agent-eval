@@ -12,7 +12,7 @@ prompt: |
   You can use threading.Lock, threading.RLock, or another appropriate
   synchronization primitive.
 
-fixture_path: ../../fixtures/sample-project
+fixture_path: ../../../fixtures/sample-project
 
 assertions:
   - type: code

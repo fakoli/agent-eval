@@ -14,7 +14,7 @@ prompt: |
   2. An appropriate error message is returned
   3. Existing tests still pass
 
-fixture_path: ../../fixtures/sample-project
+fixture_path: ../../../fixtures/sample-project
 
 assertions:
   - type: code

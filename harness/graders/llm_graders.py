@@ -14,7 +14,7 @@ class LLMGrader:
 
     def __init__(
         self,
-        model: str = "claude-haiku-4-5-20250514",
+        model: str = "claude-3-5-haiku-20241022",
         api_key: str | None = None,
     ):
         """Initialize LLM grader.

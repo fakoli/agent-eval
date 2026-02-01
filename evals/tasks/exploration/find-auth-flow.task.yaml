@@ -16,7 +16,7 @@ prompt: |
   Create a file AUTHENTICATION.md in the root directory documenting
   your findings with code references.
 
-fixture_path: ../../fixtures/sample-project
+fixture_path: ../../../fixtures/sample-project
 
 assertions:
   - type: code

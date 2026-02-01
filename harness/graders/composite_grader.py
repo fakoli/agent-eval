@@ -18,7 +18,7 @@ class CompositeGrader:
 
     def __init__(
         self,
-        llm_model: str = "claude-haiku-4-5-20250514",
+        llm_model: str = "claude-3-5-haiku-20241022",
         api_key: str | None = None,
     ):
         """Initialize composite grader.

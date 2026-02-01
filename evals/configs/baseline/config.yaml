@@ -11,7 +11,7 @@ skills_path: null
 agents_md: null
 
 # Model configuration
-model: claude-sonnet-4-5-20250514
+model: claude-sonnet-4-20250514
 max_turns: 10
 
 # Limited tools for baseline

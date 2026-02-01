@@ -15,7 +15,7 @@ prompt: |
 
   Create a file API_ENDPOINTS.md with your findings in a table format.
 
-fixture_path: ../../fixtures/sample-project
+fixture_path: ../../../fixtures/sample-project
 
 assertions:
   - type: code
