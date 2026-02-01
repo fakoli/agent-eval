@@ -245,14 +245,23 @@ class ContainerManager:
         model: str,
         max_turns: int,
     ) -> list[str]:
-        """Build the docker run command."""
+        """Build the docker run command.
+        
+        Uses host UID:GID on Unix systems to avoid permission issues with mounted volumes.
+        On Windows or when UID/GID are unavailable, falls back to config.user.
+        """
+        # Get current user's UID and GID on Unix systems
+        uid = os.getuid() if hasattr(os, 'getuid') else None
+        gid = os.getgid() if hasattr(os, 'getgid') else None
+        user_spec = f"{uid}:{gid}" if uid is not None and gid is not None else config.user
+        
         cmd = [
             self.docker_path,
             "run",
             "--rm",  # Auto-cleanup
             f"--memory={config.memory_limit}",
             f"--cpus={config.cpu_limit}",
-            f"--user={config.user}",
+            f"--user={user_spec}",
         ]
 
         # Network control
@@ -298,8 +307,9 @@ class ContainerManager:
         # Working directory
         cmd.extend(["-w", "/workspace/project"])
 
-        # Image and command
-        cmd.append(self.full_image)
+        # Image: use config.image if provided, otherwise fall back to self.full_image
+        image = config.image if config.image else self.full_image
+        cmd.append(image)
 
         return cmd
 

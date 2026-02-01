@@ -166,7 +166,7 @@ class EvalRunner:
         Returns:
             Unique run ID string
         """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         # Create a short hash from task and config names
         content = f"{task.id}:{config.name}:{run_index}"
         short_hash = hashlib.md5(content.encode()).hexdigest()[:8]
