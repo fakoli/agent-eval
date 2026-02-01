@@ -48,9 +48,3 @@ def is_valid_username(username: str) -> bool:
         return False
 
     return all(c.isalnum() or c == "_" for c in username)
-
-
-# TODO: Add email validation function
-# def is_valid_email(email: str) -> bool:
-#     """Check if an email address is valid."""
-#     pass

@@ -399,6 +399,10 @@ def matrix(
         console.print(f"[dim]Artifacts will be saved to {runner.artifacts_dir}[/dim]")
 
     # Apply limit if specified
+    if limit is not None and limit <= 0:
+        console.print("[yellow]Limit is 0 or negative, no runs will be executed.[/yellow]")
+        return
+
     effective_total = total_combos
     if limit is not None:
         effective_total = min(limit, total_combos)

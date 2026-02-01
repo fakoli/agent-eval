@@ -257,7 +257,7 @@ class TestRequireApiKey:
             assert exc_info.value.code == 1
         finally:
             # Restore the key
-            if saved_key:
+            if saved_key is not None:
                 os.environ["ANTHROPIC_API_KEY"] = saved_key
 
     def test_require_api_key_present(self):
@@ -273,7 +273,7 @@ class TestRequireApiKey:
             require_api_key("test-command")
         finally:
             # Restore original state
-            if saved_key:
+            if saved_key is not None:
                 os.environ["ANTHROPIC_API_KEY"] = saved_key
             else:
                 os.environ.pop("ANTHROPIC_API_KEY", None)
