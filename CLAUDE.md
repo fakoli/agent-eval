@@ -16,6 +16,17 @@ uv sync
 uv run python -m harness run --task evals/tasks/coding/fix-auth-bypass.task.yaml --config evals/configs/full/config.yaml
 uv run python -m harness matrix --tasks "evals/tasks/**/*.task.yaml" --configs "evals/configs/*/config.yaml" --runs 3
 
+# Run with artifact preservation (saves fixtures, output, diffs to evals/artifacts/)
+uv run python -m harness run -t task.yaml -c config.yaml --preserve-artifacts
+
+# Run in Docker container (isolated execution)
+uv run python -m harness build-image              # Build container image first
+uv run python -m harness run -t task.yaml -c config.yaml --container
+
+# Generate skill-testing scaffold
+uv run python -m harness scaffold --name my-skill-test --fixture-type python
+uv run python -m harness scaffold --name my-skill-test --skill-path ~/.claude/skills/my-skill
+
 # Validate files
 uv run python -m harness validate-task -t evals/tasks/coding/fix-auth-bypass.task.yaml
 uv run python -m harness validate-config -c evals/configs/full/config.yaml
@@ -26,6 +37,7 @@ cd fixtures/sample-project && uv run pytest tests/ # Fixture tests
 
 # Environment
 uv run python -m harness --env-file ~/.env env-status
+uv run python -m harness image-status             # Check Docker image status
 ```
 
 ## Architecture
@@ -34,7 +46,15 @@ See `docs/ARCHITECTURE.md` for full technical documentation.
 
 **Core flow:** Task loading → Environment isolation → Claude CLI execution → Grading → Reporting
 
-**Key files:** `runner.py`, `isolator.py`, `executor.py`, `graders/`
+**Key files:**
+- `runner.py` - Orchestrates evaluation runs, supports container mode and artifact preservation
+- `isolator.py` - Environment isolation and artifact archiving
+- `executor.py` - Claude CLI execution
+- `container_executor.py` - Docker-based execution
+- `container_manager.py` - Docker lifecycle management
+- `scaffold.py` - Skill-testing scaffold generation
+- `graders/` - Code and LLM grading logic
+- `docker/` - Dockerfile and entrypoint for container isolation
 
 ## Known Issues
 
@@ -44,6 +64,44 @@ See `docs/ARCHITECTURE.md` for full technical documentation.
 
 **Model name hardcoding:** The grading model is hardcoded in `harness/graders/llm_graders.py` and `harness/graders/composite_grader.py`. Update if using a different model.
 
+**Container mode requires Docker:** The `--container` flag requires Docker to be installed and running. Build the image first with `build-image`.
+
 ## Environment Variables
 
 `ANTHROPIC_API_KEY` - Required for LLM grading. Load with `--env-file ~/.env`.
+
+## Scaffold Structure
+
+The `scaffold` command generates this structure for skill A/B testing:
+
+```
+my-skill-test/
+├── README.md
+├── run-comparison.sh
+├── tasks/example.task.yaml
+├── configs/
+│   ├── baseline/config.yaml
+│   └── with-skill/config.yaml
+├── fixtures/sample-project/
+├── skills/
+└── results/
+```
+
+## Documentation Sync
+
+When adding or modifying harness features, update these files:
+
+| File | What to Update |
+|------|----------------|
+| `CLAUDE.md` | Commands section, key files, known issues |
+| `docs/ARCHITECTURE.md` | Core components, execution flow, data models |
+| `docs/CLI_REFERENCE.md` | Command options, examples, workflows |
+| `docs/EXTENDING.md` | Extension points, code examples |
+| `README.md` | Quick start, architecture diagram |
+
+Key files that affect documentation:
+- `harness/__main__.py` → CLI commands and options
+- `harness/runner.py` → EvalRunner flags and behavior
+- `harness/executor.py` → Executor implementations
+- `harness/isolator.py` → Environment and artifact handling
+- `harness/scaffold.py` → Scaffold templates

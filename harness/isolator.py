@@ -1,10 +1,14 @@
 """Environment isolation for evaluation runs."""
 
 import difflib
+import json
 import shutil
+import tarfile
 import tempfile
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from harness.models import FileChange
 
@@ -242,3 +246,185 @@ class EnvironmentIsolator:
             diff_text = diff_text[:10000] + "\n... (truncated)"
 
         return diff_text
+
+    def archive_run(
+        self,
+        env: IsolatedEnv,
+        run_id: str,
+        artifacts_dir: Path,
+        before_state: dict[str, str],
+        metadata: dict[str, Any] | None = None,
+        claude_output: dict[str, Any] | None = None,
+        test_output: str | None = None,
+    ) -> Path:
+        """Archive the results of an evaluation run.
+
+        Creates a directory with all artifacts from the run, including:
+        - Original fixture state (before.tar.gz)
+        - Modified fixture state (after.tar.gz)
+        - File changes diff
+        - Claude output JSON
+        - Test output log
+        - Metadata JSON
+
+        Args:
+            env: The isolated environment
+            run_id: Unique identifier for this run
+            artifacts_dir: Base directory for storing artifacts
+            before_state: Snapshot of files before execution (from snapshot_files)
+            metadata: Additional metadata to include
+            claude_output: Claude execution output (raw JSON)
+            test_output: Test execution output
+
+        Returns:
+            Path to the archive directory
+        """
+        # Create archive directory
+        archive_dir = artifacts_dir / run_id
+        archive_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create metadata
+        run_metadata = {
+            "run_id": run_id,
+            "timestamp": datetime.now().isoformat(),
+            "env_path": str(env.path),
+            "files_before_count": len(before_state),
+        }
+        if metadata:
+            run_metadata.update(metadata)
+
+        # Calculate file changes
+        changes = self.diff_files(before_state, env.path)
+        run_metadata["files_changed_count"] = len(changes)
+
+        # Write metadata
+        metadata_path = archive_dir / "metadata.json"
+        metadata_path.write_text(json.dumps(run_metadata, indent=2, default=str))
+
+        # Create before snapshot tarball
+        before_tar_path = archive_dir / "fixture_before.tar.gz"
+        self._create_tarball_from_snapshot(before_state, before_tar_path)
+
+        # Create after snapshot tarball
+        after_tar_path = archive_dir / "fixture_after.tar.gz"
+        self._create_tarball_from_dir(env.path, after_tar_path)
+
+        # Write file changes diff
+        if changes:
+            diff_content = self._generate_combined_diff(before_state, changes)
+            (archive_dir / "file_changes.diff").write_text(diff_content)
+
+        # Write Claude output if provided
+        if claude_output:
+            claude_output_path = archive_dir / "claude_output.json"
+            claude_output_path.write_text(
+                json.dumps(claude_output, indent=2, default=str)
+            )
+
+        # Write test output if provided
+        if test_output:
+            (archive_dir / "test_output.log").write_text(test_output)
+
+        return archive_dir
+
+    def _create_tarball_from_snapshot(
+        self,
+        snapshot: dict[str, str],
+        tar_path: Path,
+    ) -> None:
+        """Create a tarball from a file snapshot.
+
+        Args:
+            snapshot: Dict mapping relative paths to file contents
+            tar_path: Path to create the tarball at
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Write all files from snapshot
+            for rel_path, content in snapshot.items():
+                file_path = temp_path / rel_path
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_text(content)
+
+            # Create tarball
+            with tarfile.open(tar_path, "w:gz") as tar:
+                for file_path in temp_path.rglob("*"):
+                    if file_path.is_file():
+                        arcname = str(file_path.relative_to(temp_path))
+                        tar.add(file_path, arcname=arcname)
+
+    def _create_tarball_from_dir(
+        self,
+        source_dir: Path,
+        tar_path: Path,
+        exclude_patterns: list[str] | None = None,
+    ) -> None:
+        """Create a tarball from a directory.
+
+        Args:
+            source_dir: Directory to archive
+            tar_path: Path to create the tarball at
+            exclude_patterns: Patterns to exclude (e.g., '__pycache__', '.git')
+        """
+        if exclude_patterns is None:
+            exclude_patterns = [
+                "__pycache__",
+                ".git",
+                ".venv",
+                "node_modules",
+                "*.pyc",
+                "*.pyo",
+            ]
+
+        def filter_func(tarinfo):
+            """Filter out excluded patterns."""
+            for pattern in exclude_patterns:
+                if pattern in tarinfo.name:
+                    return None
+            return tarinfo
+
+        with tarfile.open(tar_path, "w:gz") as tar:
+            for item in source_dir.iterdir():
+                tar.add(item, arcname=item.name, filter=filter_func)
+
+    def _generate_combined_diff(
+        self,
+        before_state: dict[str, str],
+        changes: list[FileChange],
+    ) -> str:
+        """Generate a combined diff of all file changes.
+
+        Args:
+            before_state: Original file contents
+            changes: List of file changes
+
+        Returns:
+            Combined unified diff string
+        """
+        diff_parts = []
+
+        for change in changes:
+            if change.action == "created":
+                # Show as new file
+                diff_parts.append(f"--- /dev/null")
+                diff_parts.append(f"+++ b/{change.path}")
+                if change.content_after:
+                    for line in change.content_after.splitlines():
+                        diff_parts.append(f"+{line}")
+                diff_parts.append("")
+
+            elif change.action == "deleted":
+                # Show as deleted file
+                diff_parts.append(f"--- a/{change.path}")
+                diff_parts.append(f"+++ /dev/null")
+                if change.path in before_state:
+                    for line in before_state[change.path].splitlines():
+                        diff_parts.append(f"-{line}")
+                diff_parts.append("")
+
+            elif change.action == "modified" and change.diff:
+                diff_parts.append(change.diff)
+                diff_parts.append("")
+
+        return "\n".join(diff_parts)

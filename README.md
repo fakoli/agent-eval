@@ -46,6 +46,13 @@ uv run python -m harness matrix \
 uv run python -m harness regression \
   --baseline results/baseline.json \
   --current results/current.json
+
+# Generate scaffold for testing a new skill
+uv run python -m harness scaffold --name my-skill-test
+
+# Run in isolated Docker container
+uv run python -m harness build-image  # first time only
+uv run python -m harness run -t task.yaml -c config.yaml --container
 ```
 
 ## Architecture
@@ -60,19 +67,21 @@ Tasks (what to test)     Configs (how to configure)     Graders (how to score)
                           │  EvalRunner │
                           └─────────────┘
                                   │
-                    ┌─────────────┼─────────────┐
-                    ▼             ▼             ▼
-              ┌──────────┐ ┌──────────┐ ┌──────────┐
-              │ Isolator │ │ Executor │ │ Reporter │
-              └──────────┘ └──────────┘ └──────────┘
+          ┌───────────────────────┼───────────────────────┐
+          ▼                       ▼                       ▼
+    ┌──────────┐           ┌──────────┐            ┌──────────┐
+    │ Isolator │           │ Executor │            │ Reporter │
+    │ +Archive │           │ +Docker  │            │          │
+    └──────────┘           └──────────┘            └──────────┘
 ```
 
 - **Tasks**: YAML files defining prompts, assertions, and scoring weights
 - **Configs**: Environment variants (baseline, skills-only, claude-md-only, full)
 - **Graders**: Code-based (tests pass, file contains) + LLM-based (rubric evaluation)
-- **Isolator**: Fresh temp directory per run with injected configuration
-- **Executor**: Pluggable backend (Claude Code CLI, future: Cursor)
+- **Isolator**: Fresh temp directory per run with injected configuration + artifact archiving
+- **Executor**: Pluggable backend (Claude CLI, Docker containers)
 - **Reporter**: Results aggregation and regression comparison
+- **Scaffold**: Template generator for skill A/B testing
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed technical documentation.
 

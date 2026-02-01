@@ -33,7 +33,10 @@ harness/
 ├── __main__.py          # CLI entry point (Click commands)
 ├── runner.py            # EvalRunner - orchestrates test matrix
 ├── executor.py          # Executor ABC + ClaudeExecutor
-├── isolator.py          # EnvironmentIsolator - temp dir management
+├── container_executor.py # ContainerExecutor - Docker-based execution
+├── container_manager.py # Docker lifecycle management
+├── isolator.py          # EnvironmentIsolator - temp dir + artifact archiving
+├── scaffold.py          # ScaffoldGenerator - skill-testing templates
 ├── reporter.py          # Result formatting and comparison
 ├── models.py            # Pydantic data models
 ├── config_exporter.py   # Export Claude config for CI
@@ -42,6 +45,10 @@ harness/
     ├── code_graders.py      # Objective checks (tests, files)
     ├── llm_graders.py       # LLM-as-judge evaluation
     └── composite_grader.py  # Combined grading logic
+
+docker/
+├── Dockerfile           # Container image definition
+└── entrypoint.sh        # Container entry script
 ```
 
 ### Execution Flow
@@ -100,10 +107,32 @@ class Executor(ABC):
 
 Currently implemented:
 - `ClaudeExecutor`: Wraps the Claude Code CLI
+- `ContainerExecutor`: Runs Claude Code in isolated Docker containers
 
 Designed for future extension:
 - `CursorExecutor`: Could wrap Cursor IDE automation
 - `MockExecutor`: For testing without actual LLM calls
+
+#### ContainerExecutor
+
+For isolated execution, the `ContainerExecutor` runs evaluations inside Docker containers:
+
+```python
+from harness.container_executor import ContainerExecutor
+
+executor = ContainerExecutor(
+    network_enabled=True,   # Allow dependency fetching
+    memory_limit="4g",      # Resource limits
+    cpu_limit=2.0,
+)
+runner = EvalRunner(executor=executor)
+```
+
+The container provides:
+- **Isolation**: Prevents bad evals from affecting the host
+- **Resource limits**: Memory and CPU constraints
+- **Non-root execution**: Runs as `eval` user inside container
+- **Auto-cleanup**: Containers removed after execution
 
 #### CompositeGrader
 
@@ -138,6 +167,49 @@ Features:
 - Injects configuration files (CLAUDE.md, agents.md)
 - Tracks file changes (before/after diff)
 - Automatic cleanup on exit
+- **Artifact archiving** for reproducibility
+
+#### Artifact Preservation
+
+When `preserve_artifacts=True`, the isolator archives each run:
+
+```python
+runner = EvalRunner(preserve_artifacts=True)
+# Archives saved to evals/artifacts/{run_id}/
+```
+
+Archive contents:
+- `metadata.json`: Run configuration and results summary
+- `fixture_before.tar.gz`: Original fixture state
+- `fixture_after.tar.gz`: Modified fixture state
+- `file_changes.diff`: Unified diff of all changes
+- `claude_output.json`: Full Claude execution output
+- `test_output.log`: Test execution output
+
+#### ScaffoldGenerator
+
+Generates skill-testing directory structures:
+
+```python
+from harness.scaffold import ScaffoldGenerator
+
+generator = ScaffoldGenerator(name="my-skill-test")
+generator.generate(fixture_type="python", skill_path=Path("~/.claude/skills/my-skill"))
+```
+
+Generated structure:
+```
+my-skill-test/
+├── README.md
+├── run-comparison.sh
+├── tasks/example.task.yaml
+├── configs/
+│   ├── baseline/config.yaml
+│   └── with-skill/config.yaml
+├── fixtures/sample-project/
+├── skills/
+└── results/
+```
 
 ## Data Models
 

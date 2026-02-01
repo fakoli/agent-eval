@@ -12,6 +12,7 @@ from harness.config_exporter import ConfigExporter
 from harness.config_importer import ConfigImporter
 from harness.reporter import Reporter
 from harness.runner import EvalRunner
+from harness.scaffold import ScaffoldGenerator
 
 console = Console()
 
@@ -118,10 +119,36 @@ def cli(ctx: click.Context, env_file: Path | None):
     is_flag=True,
     help="Show detailed output including full test output and diffs",
 )
-def run(task: Path, config: Path, model: str | None, output: Path | None, verbose: bool):
+@click.option(
+    "--container",
+    is_flag=True,
+    help="Run evaluation in an isolated Docker container",
+)
+@click.option(
+    "--preserve-artifacts",
+    is_flag=True,
+    help="Preserve full artifacts from the run (fixtures, output, diffs)",
+)
+def run(
+    task: Path,
+    config: Path,
+    model: str | None,
+    output: Path | None,
+    verbose: bool,
+    container: bool,
+    preserve_artifacts: bool,
+):
     """Run a single evaluation task."""
-    runner = EvalRunner()
+    runner = EvalRunner(
+        use_container=container,
+        preserve_artifacts=preserve_artifacts,
+    )
     reporter = Reporter(console)
+
+    if container:
+        console.print("[dim]Running in container mode[/dim]")
+    if preserve_artifacts:
+        console.print(f"[dim]Artifacts will be saved to {runner.artifacts_dir}[/dim]")
 
     console.print(f"Loading task from {task}...")
     task_obj = runner.load_task(task)
@@ -176,10 +203,36 @@ def run(task: Path, config: Path, model: str | None, output: Path | None, verbos
     type=click.Path(path_type=Path),
     help="Output file for results",
 )
-def matrix(tasks: str, configs: str, models: str | None, runs: int, output: Path | None):
+@click.option(
+    "--container",
+    is_flag=True,
+    help="Run evaluations in isolated Docker containers",
+)
+@click.option(
+    "--preserve-artifacts",
+    is_flag=True,
+    help="Preserve full artifacts from each run",
+)
+def matrix(
+    tasks: str,
+    configs: str,
+    models: str | None,
+    runs: int,
+    output: Path | None,
+    container: bool,
+    preserve_artifacts: bool,
+):
     """Run full evaluation matrix."""
-    runner = EvalRunner()
+    runner = EvalRunner(
+        use_container=container,
+        preserve_artifacts=preserve_artifacts,
+    )
     reporter = Reporter(console)
+
+    if container:
+        console.print("[dim]Running in container mode[/dim]")
+    if preserve_artifacts:
+        console.print(f"[dim]Artifacts will be saved to {runner.artifacts_dir}[/dim]")
 
     console.print(f"Loading tasks from {tasks}...")
     task_list = runner.load_tasks_from_glob(tasks)
@@ -567,6 +620,167 @@ def env_status(ctx: click.Context):
             console.print(f"  [green]{var}[/green]: {value}")
         else:
             console.print(f"  [dim]{var}[/dim]: not set - {description}")
+
+
+@cli.command()
+@click.option(
+    "--name",
+    "-n",
+    required=True,
+    help="Name of the skill test (used for directory name)",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output directory (default: current directory)",
+)
+@click.option(
+    "--fixture-type",
+    type=click.Choice(["python", "javascript"]),
+    default="python",
+    help="Type of fixture project to generate",
+)
+@click.option(
+    "--skill-path",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to existing skill to copy into the scaffold",
+)
+def scaffold(
+    name: str,
+    output: Path | None,
+    fixture_type: str,
+    skill_path: Path | None,
+):
+    """Generate a skill-testing directory structure.
+
+    Creates a complete scaffold for A/B testing a skill, including:
+    - Task definitions
+    - Baseline and with-skill configs
+    - Sample fixture project
+    - Run comparison script
+
+    Example:
+        uv run python -m harness scaffold --name my-skill-test --fixture-type python
+    """
+    generator = ScaffoldGenerator(name=name, output_dir=output)
+
+    try:
+        result_path = generator.generate(
+            fixture_type=fixture_type,
+            skill_path=skill_path,
+        )
+        console.print(f"[green]Scaffold created at: {result_path}[/green]")
+        console.print()
+        console.print("Generated structure:")
+        console.print(f"  {result_path}/")
+        console.print("  ├── README.md")
+        console.print("  ├── run-comparison.sh")
+        console.print("  ├── tasks/")
+        console.print("  │   └── example.task.yaml")
+        console.print("  ├── configs/")
+        console.print("  │   ├── baseline/config.yaml")
+        console.print("  │   └── with-skill/config.yaml")
+        console.print("  ├── fixtures/")
+        console.print("  │   └── sample-project/")
+        console.print("  ├── skills/")
+        if skill_path:
+            console.print(f"  │   └── {skill_path.name}/")
+        else:
+            console.print("  │   └── your-skill/")
+        console.print("  └── results/")
+        console.print()
+        console.print("Next steps:")
+        console.print("  1. Add your skill to skills/")
+        console.print("  2. Update configs/with-skill/config.yaml")
+        console.print("  3. Customize tasks/ and fixtures/")
+        console.print("  4. Run: ./run-comparison.sh")
+    except Exception as e:
+        console.print(f"[red]Failed to create scaffold: {e}[/red]")
+        raise SystemExit(1)
+
+
+@cli.command("build-image")
+@click.option(
+    "--no-cache",
+    is_flag=True,
+    help="Build without using cache",
+)
+def build_image(no_cache: bool):
+    """Build the Docker container image for isolated evaluations.
+
+    The image includes:
+    - Claude Code CLI
+    - Python with uv package manager
+    - Node.js for JavaScript fixtures
+    - Non-root user for security
+
+    Example:
+        uv run python -m harness build-image
+    """
+    from harness.container_manager import ContainerManager
+
+    manager = ContainerManager()
+
+    # Check Docker availability
+    if not manager.is_docker_available():
+        console.print("[red]Docker is not available.[/red]")
+        console.print("Please install Docker and ensure it's running.")
+        raise SystemExit(1)
+
+    console.print("Building evaluation container image...")
+    console.print(f"  Image: {manager.full_image}")
+    if no_cache:
+        console.print("  [dim]Building without cache[/dim]")
+
+    try:
+        success = manager.build_image(no_cache=no_cache)
+        if success:
+            console.print("[green]Image built successfully![/green]")
+            console.print()
+            console.print("You can now run evaluations in containers:")
+            console.print("  uv run python -m harness run -t task.yaml -c config.yaml --container")
+        else:
+            console.print("[red]Image build failed.[/red]")
+            console.print("Check the Docker build output above for errors.")
+            raise SystemExit(1)
+    except FileNotFoundError:
+        console.print("[red]Dockerfile not found.[/red]")
+        console.print("Ensure docker/Dockerfile exists in the project root.")
+        raise SystemExit(1)
+    except Exception as e:
+        console.print(f"[red]Build failed: {e}[/red]")
+        raise SystemExit(1)
+
+
+@cli.command("image-status")
+def image_status():
+    """Check the status of the evaluation container image."""
+    from harness.container_manager import ContainerManager
+
+    manager = ContainerManager()
+
+    if not manager.is_docker_available():
+        console.print("[red]Docker is not available.[/red]")
+        raise SystemExit(1)
+
+    console.print(f"Checking image: {manager.full_image}")
+
+    if manager.image_exists():
+        console.print("[green]Image exists[/green]")
+
+        info = manager.get_image_info()
+        if info:
+            created = info.get("Created", "unknown")
+            size = info.get("Size", 0)
+            size_mb = size / (1024 * 1024) if size else 0
+            console.print(f"  Created: {created}")
+            console.print(f"  Size: {size_mb:.1f} MB")
+    else:
+        console.print("[yellow]Image not found[/yellow]")
+        console.print("Build with: uv run python -m harness build-image")
 
 
 if __name__ == "__main__":

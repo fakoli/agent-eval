@@ -38,10 +38,12 @@ The harness is designed with extensibility in mind:
 
 **Extension Points:**
 1. **Executor**: Add support for new AI tools (Cursor, Copilot)
-2. **CodeGrader**: Add new objective check types
-3. **Assertion Types**: Add new assertion categories
-4. **Configs**: Create custom configuration variants
-5. **Fixtures**: Create test codebases
+2. **Container Execution**: Run evaluations in isolated Docker containers
+3. **CodeGrader**: Add new objective check types
+4. **Assertion Types**: Add new assertion categories
+5. **Configs**: Create custom configuration variants
+6. **Fixtures**: Create test codebases
+7. **Scaffold Templates**: Customize skill-testing scaffolds
 
 ---
 
@@ -181,6 +183,73 @@ def run(task, config, executor, ...):
 
     runner = EvalRunner(executor=exec)
     # ...
+```
+
+---
+
+## Using Container Execution
+
+Run evaluations in isolated Docker containers for security and reproducibility.
+
+### Step 1: Build the Container Image
+
+```bash
+uv run python -m harness build-image
+```
+
+This creates an image with:
+- Claude Code CLI
+- Python with uv package manager
+- Node.js for JavaScript fixtures
+- Non-root `eval` user
+
+### Step 2: Run with Container Flag
+
+```python
+from harness.runner import EvalRunner
+
+# Via CLI
+# uv run python -m harness run -t task.yaml -c config.yaml --container
+
+# Via Python
+runner = EvalRunner(use_container=True)
+result = runner.run_single(task, config)
+```
+
+### Step 3: Customize Container Configuration
+
+```python
+from harness.container_executor import ContainerExecutor
+from harness.container_manager import ContainerConfig
+
+config = ContainerConfig(
+    memory_limit="8g",        # More memory
+    cpu_limit=4.0,            # More CPUs
+    network_enabled=False,    # Disable network
+    timeout=600,              # 10 minute timeout
+)
+
+executor = ContainerExecutor(config=config)
+runner = EvalRunner(executor=executor)
+```
+
+### Step 4: Modify the Dockerfile (Advanced)
+
+**File:** `docker/Dockerfile`
+
+```dockerfile
+# Add custom dependencies
+RUN apt-get update && apt-get install -y \
+    my-custom-tool \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add custom scripts
+COPY custom-script.sh /home/eval/
+```
+
+Rebuild after modifications:
+```bash
+uv run python -m harness build-image --no-cache
 ```
 
 ---
@@ -777,4 +846,161 @@ scoring:
   tests_pass: 60
   file_contains: 20
   llm_quality: 20
+```
+
+---
+
+## Customizing Scaffold Templates
+
+Modify the scaffold generator to create custom project structures.
+
+### Step 1: Understand Template Constants
+
+**File:** `harness/scaffold.py`
+
+The scaffold generator uses template constants:
+- `README_TEMPLATE`: README.md content
+- `BASELINE_CONFIG_TEMPLATE`: Baseline config.yaml
+- `WITH_SKILL_CONFIG_TEMPLATE`: With-skill config.yaml
+- `TASK_TEMPLATE`: Example task file
+- `RUN_COMPARISON_TEMPLATE`: Shell script
+- `PYTHON_*_TEMPLATE`: Python fixture files
+- `JS_*_TEMPLATE`: JavaScript fixture files
+
+### Step 2: Add New Fixture Types
+
+To add a new fixture type (e.g., Go):
+
+```python
+# harness/scaffold.py
+
+GO_MOD_TEMPLATE = """module {name}
+
+go 1.21
+"""
+
+GO_MAIN_TEMPLATE = '''package main
+
+func ProcessData(data map[string]string) map[string]string {
+    // TODO: Implementation with issues to fix
+    return data
+}
+'''
+
+GO_TEST_TEMPLATE = '''package main
+
+import "testing"
+
+func TestProcessData(t *testing.T) {
+    data := map[string]string{"key": "value"}
+    result := ProcessData(data)
+    if result["key"] != "value" {
+        t.Errorf("Expected value, got %s", result["key"])
+    }
+}
+'''
+
+class ScaffoldGenerator:
+    def _generate_fixture(self, fixture_type: str) -> None:
+        # ... existing code ...
+
+        elif fixture_type == "go":
+            content = GO_MOD_TEMPLATE.format(name=f"{self.name}-fixture")
+            (fixture_dir / "go.mod").write_text(content)
+            (fixture_dir / "main.go").write_text(GO_MAIN_TEMPLATE)
+            (fixture_dir / "main_test.go").write_text(GO_TEST_TEMPLATE)
+```
+
+### Step 3: Add Fixture Type to CLI
+
+**File:** `harness/__main__.py`
+
+```python
+@cli.command()
+@click.option(
+    "--fixture-type",
+    type=click.Choice(["python", "javascript", "go"]),
+    default="python",
+    help="Type of fixture project to generate",
+)
+def scaffold(...):
+    # ...
+```
+
+### Step 4: Update Task Templates
+
+Modify `TASK_TEMPLATE` to include fixture-specific test commands:
+
+```python
+def _generate_task(self, fixture_type: str) -> None:
+    test_commands = {
+        "python": "uv run pytest tests/ -v",
+        "javascript": "npm test",
+        "go": "go test -v ./...",
+    }
+
+    content = TASK_TEMPLATE.format(
+        task_id=f"{self.name}-example",
+        description="Example task for skill evaluation",
+        fixture_name="sample-project",
+        test_command=test_commands.get(fixture_type, "echo 'No tests'"),
+    )
+```
+
+---
+
+## Using Artifact Preservation
+
+Enable artifact preservation for debugging and reproducibility.
+
+### Step 1: Enable via CLI
+
+```bash
+uv run python -m harness run \
+  -t task.yaml \
+  -c config.yaml \
+  --preserve-artifacts
+```
+
+### Step 2: Enable via Python
+
+```python
+runner = EvalRunner(preserve_artifacts=True, artifacts_dir=Path("my-artifacts"))
+result = runner.run_single(task, config)
+```
+
+### Step 3: Examine Artifacts
+
+```
+evals/artifacts/eval_20250131_103022_abc12345/
+├── metadata.json          # Run configuration and results
+├── fixture_before.tar.gz  # Original fixture state
+├── fixture_after.tar.gz   # Modified fixture state
+├── file_changes.diff      # Unified diff of changes
+├── claude_output.json     # Full Claude response
+└── test_output.log        # Test execution output
+```
+
+### Step 4: Customize Archive Contents
+
+**File:** `harness/isolator.py`
+
+```python
+def archive_run(
+    self,
+    env: IsolatedEnv,
+    run_id: str,
+    artifacts_dir: Path,
+    before_state: dict[str, str],
+    metadata: dict[str, Any] | None = None,
+    claude_output: dict[str, Any] | None = None,
+    test_output: str | None = None,
+    custom_files: dict[str, str] | None = None,  # Add custom files
+) -> Path:
+    # ... existing code ...
+
+    # Add custom files to archive
+    if custom_files:
+        for filename, content in custom_files.items():
+            (archive_dir / filename).write_text(content)
 ```
