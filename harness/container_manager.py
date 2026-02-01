@@ -89,7 +89,7 @@ class ContainerManager:
 
         Args:
             dockerfile_path: Path to Dockerfile (defaults to docker/Dockerfile)
-            context_path: Build context path (defaults to repo root)
+            context_path: Build context path (defaults to the Dockerfile's directory, e.g. docker/)
             no_cache: Whether to build without cache
 
         Returns:
