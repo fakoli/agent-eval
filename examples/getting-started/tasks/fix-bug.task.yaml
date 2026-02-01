@@ -1,0 +1,37 @@
+id: fix-division-bug
+category: coding
+description: Fix the division by zero bug in the calculator module
+difficulty: easy
+
+prompt: |
+  The `divide` function in `src/calculator.py` has a bug - it doesn't handle
+  division by zero. When someone calls `divide(10, 0)`, it should raise a
+  `ValueError` with a message about division by zero.
+
+  Fix this bug so all the tests pass.
+
+fixture_path: ../fixtures/python-utils
+
+assertions:
+  # Primary check: all tests pass
+  - type: code
+    check: tests_pass
+    command: "python -m pytest tests/test_calculator.py -v"
+
+  # Verify the fix was applied correctly
+  - type: code
+    check: file_contains
+    file: src/calculator.py
+    pattern: "ValueError|ZeroDivisionError"
+
+  # Ensure we didn't break anything
+  - type: code
+    check: file_contains
+    file: src/calculator.py
+    pattern: "def divide"
+
+scoring:
+  tests_pass: 70
+  file_contains: 30
+
+timeout_seconds: 120

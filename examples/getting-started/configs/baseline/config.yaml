@@ -1,0 +1,26 @@
+name: baseline
+description: No custom instructions - tests Claude's default behavior
+
+# No CLAUDE.md instructions
+claude_md: null
+
+# No skills
+skills_path: null
+
+# No agents
+agents_md: null
+
+# Uses default model (claude-sonnet-4-20250514)
+# model: claude-sonnet-4-20250514
+
+# Uses default max turns (10)
+# max_turns: 10
+
+# Standard tools for coding tasks
+allowed_tools:
+  - Read
+  - Edit
+  - Write
+  - Bash
+  - Grep
+  - Glob

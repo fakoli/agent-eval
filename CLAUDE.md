@@ -12,9 +12,28 @@ CI evaluation harness for testing Claude Code configurations. Detects behavioral
 # Setup
 uv sync
 
+# Self-test (verify harness is working)
+uv run python -m harness self-test
+
+# Discover tasks and configs
+uv run python -m harness ls                        # List all tasks and configs
+uv run python -m harness ls tasks                  # List tasks only
+uv run python -m harness ls configs                # List configs only
+uv run python -m harness ls --path evals/          # Search specific directory
+
+# Dry-run (validate without executing)
+uv run python -m harness run -t examples/getting-started/tasks/fix-bug.task.yaml \
+    -c examples/getting-started/configs/baseline/config.yaml --dry-run
+uv run python -m harness matrix -t "examples/getting-started/tasks/*.yaml" \
+    -c "examples/getting-started/configs/*/config.yaml" --dry-run
+
 # Run evaluations
 uv run python -m harness run --task evals/tasks/coding/fix-auth-bypass.task.yaml --config evals/configs/full/config.yaml
 uv run python -m harness matrix --tasks "evals/tasks/**/*.task.yaml" --configs "evals/configs/*/config.yaml" --runs 3
+
+# Quick testing with --limit
+uv run python -m harness run -t task.yaml -c config.yaml --limit 1
+uv run python -m harness matrix -t "tasks/*.yaml" -c "configs/*" --limit 5
 
 # Run with artifact preservation (saves fixtures, output, diffs to evals/artifacts/)
 uv run python -m harness run -t task.yaml -c config.yaml --preserve-artifacts
@@ -33,6 +52,7 @@ uv run python -m harness validate-config -c evals/configs/full/config.yaml
 
 # Tests
 uv run pytest tests/                               # Harness tests
+uv run pytest tests/test_code_quality.py -v        # Code quality tests
 cd fixtures/sample-project && uv run pytest tests/ # Fixture tests
 
 # Environment

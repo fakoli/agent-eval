@@ -179,6 +179,7 @@ class EvalRunner:
         models: list[str] | None = None,
         runs_per_combo: int = 3,
         callback=None,
+        limit: int | None = None,
     ) -> list[EvalResult]:
         """Run full evaluation matrix.
 
@@ -188,11 +189,13 @@ class EvalRunner:
             models: List of models (overrides config.model if provided)
             runs_per_combo: Number of runs per combination
             callback: Optional callback(task, config, model, run, result) for progress
+            limit: Optional limit on total number of runs (for quick testing)
 
         Returns:
             List of all EvalResults
         """
         results = []
+        run_count = 0
 
         for task in tasks:
             for config in configs:
@@ -204,8 +207,13 @@ class EvalRunner:
                     config_with_model.model = model
 
                     for run_idx in range(runs_per_combo):
+                        # Check limit before running
+                        if limit is not None and run_count >= limit:
+                            return results
+
                         result = self.run_single(task, config_with_model, run_idx)
                         results.append(result)
+                        run_count += 1
 
                         if callback:
                             callback(task, config, model, run_idx, result)

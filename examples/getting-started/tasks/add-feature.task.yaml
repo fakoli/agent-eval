@@ -1,0 +1,43 @@
+id: add-email-validation
+category: coding
+description: Add email validation function to the validator module
+difficulty: medium
+
+prompt: |
+  Add an `is_valid_email` function to `src/validator.py` that validates
+  email addresses.
+
+  Requirements:
+  - Function signature: `def is_valid_email(email: str) -> bool`
+  - Valid emails have: local part, @ symbol, domain with at least one dot
+  - Empty strings should return False
+  - Follow the existing code style in the file
+
+  The tests in `tests/test_validator.py` already have test cases for this
+  function. Make them pass.
+
+fixture_path: ../fixtures/python-utils
+
+assertions:
+  # All validator tests should pass (including email tests)
+  - type: code
+    check: tests_pass
+    command: "python -m pytest tests/test_validator.py -v"
+
+  # Function was added
+  - type: code
+    check: file_contains
+    file: src/validator.py
+    pattern: "def is_valid_email"
+
+  # Has proper docstring
+  - type: code
+    check: file_contains
+    file: src/validator.py
+    pattern: '""".*[Ee]mail.*"""'
+
+scoring:
+  tests_pass: 60
+  file_contains: 40
+
+timeout_seconds: 180

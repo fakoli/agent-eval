@@ -1,0 +1,48 @@
+name: with-instructions
+description: Includes project-specific CLAUDE.md instructions
+
+# Project-specific instructions
+claude_md: |
+  # Python Utils Project
+
+  ## Code Style
+  - Use type hints for all function parameters and return values
+  - Include docstrings for all public functions (Google style)
+  - Keep functions focused and small (< 20 lines)
+
+  ## Testing
+  - Run tests before and after making changes: `python -m pytest tests/ -v`
+  - Read the test file first to understand expected behavior
+  - Don't modify tests unless explicitly asked
+
+  ## Error Handling
+  - Use specific exception types (ValueError, TypeError, etc.)
+  - Include helpful error messages
+  - Document exceptions in docstrings with Raises section
+
+  ## Workflow
+  1. Read the relevant source file first
+  2. Read the corresponding test file
+  3. Make minimal changes to fix the issue
+  4. Run tests to verify
+
+# No skills
+skills_path: null
+
+# No agents
+agents_md: null
+
+# Uses default model
+# model: claude-sonnet-4-20250514
+
+# Uses default max turns
+# max_turns: 10
+
+# Standard tools for coding tasks
+allowed_tools:
+  - Read
+  - Edit
+  - Write
+  - Bash
+  - Grep
+  - Glob
