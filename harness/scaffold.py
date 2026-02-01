@@ -3,6 +3,8 @@
 import shutil
 from pathlib import Path
 
+from harness.constants import DEFAULT_EXECUTION_MODEL, DEFAULT_MAX_TURNS
+
 # Template constants
 README_TEMPLATE = """# {name} - Skill Testing
 
@@ -50,7 +52,7 @@ Compare the `overall_score` between baseline and with-skill runs:
 4. Modify `fixtures/` to have intentional issues your skill helps fix
 """
 
-BASELINE_CONFIG_TEMPLATE = """name: baseline
+BASELINE_CONFIG_TEMPLATE = f"""name: baseline
 description: No skill - control group
 
 # No custom instructions
@@ -63,8 +65,8 @@ skills_path: null
 agents_md: null
 
 # Model configuration
-model: claude-sonnet-4-20250514
-max_turns: 10
+model: {DEFAULT_EXECUTION_MODEL}
+max_turns: {DEFAULT_MAX_TURNS}
 
 # Standard tools
 allowed_tools:
@@ -76,21 +78,21 @@ allowed_tools:
   - Glob
 """
 
-WITH_SKILL_CONFIG_TEMPLATE = """name: with-skill
+WITH_SKILL_CONFIG_TEMPLATE = f"""name: with-skill
 description: With skill loaded
 
 # No additional CLAUDE.md - testing skill in isolation
 claude_md: null
 
 # Update this path to point to your skill
-skills_path: ../../skills/{skill_name}
+skills_path: ../../skills/{{skill_name}}
 
 # No agents
 agents_md: null
 
 # Model configuration
-model: claude-sonnet-4-20250514
-max_turns: 10
+model: {DEFAULT_EXECUTION_MODEL}
+max_turns: {DEFAULT_MAX_TURNS}
 
 # Standard tools
 allowed_tools:

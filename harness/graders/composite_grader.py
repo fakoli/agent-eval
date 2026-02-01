@@ -8,6 +8,7 @@ Features:
 
 from pathlib import Path
 
+from harness.constants import DEFAULT_GRADING_MODEL
 from harness.graders.code_graders import CodeGrader
 from harness.graders.llm_graders import LLMGrader
 from harness.models import (
@@ -34,7 +35,7 @@ class CompositeGrader:
 
     def __init__(
         self,
-        llm_model: str = "claude-3-5-haiku-20241022",
+        llm_model: str = DEFAULT_GRADING_MODEL,
         api_key: str | None = None,
     ):
         """Initialize composite grader.

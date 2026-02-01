@@ -7,16 +7,26 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from harness.constants import (
+    DEFAULT_CONTAINER_CPU,
+    DEFAULT_CONTAINER_MEMORY,
+    DEFAULT_CONTAINER_TIMEOUT,
+    DEFAULT_DOCKER_IMAGE_NAME,
+    DEFAULT_DOCKER_IMAGE_TAG,
+    DEFAULT_EXECUTION_MODEL,
+    DEFAULT_MAX_TURNS,
+)
+
 
 @dataclass
 class ContainerConfig:
     """Configuration for container execution."""
 
-    image: str = "agent-eval:latest"
-    memory_limit: str = "4g"
-    cpu_limit: float = 2.0
+    image: str = f"{DEFAULT_DOCKER_IMAGE_NAME}:{DEFAULT_DOCKER_IMAGE_TAG}"
+    memory_limit: str = DEFAULT_CONTAINER_MEMORY
+    cpu_limit: float = DEFAULT_CONTAINER_CPU
     network_enabled: bool = True
-    timeout: int = 600  # 10 minutes max
+    timeout: int = DEFAULT_CONTAINER_TIMEOUT
     user: str = "eval"
 
 
@@ -138,8 +148,8 @@ class ContainerManager:
         env_vars: dict[str, str] | None = None,
         claude_md: str | None = None,
         skills_path: Path | None = None,
-        model: str = "claude-sonnet-4-20250514",
-        max_turns: int = 10,
+        model: str = DEFAULT_EXECUTION_MODEL,
+        max_turns: int = DEFAULT_MAX_TURNS,
     ) -> ContainerResult:
         """Run an evaluation in a container.
 
@@ -246,7 +256,7 @@ class ContainerManager:
         max_turns: int,
     ) -> list[str]:
         """Build the docker run command.
-        
+
         Uses host UID:GID on Unix systems to avoid permission issues with mounted volumes.
         On Windows or when UID/GID are unavailable, falls back to config.user.
         """
@@ -254,7 +264,7 @@ class ContainerManager:
         uid = os.getuid() if hasattr(os, 'getuid') else None
         gid = os.getgid() if hasattr(os, 'getgid') else None
         user_spec = f"{uid}:{gid}" if uid is not None and gid is not None else config.user
-        
+
         cmd = [
             self.docker_path,
             "run",

@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import click
@@ -16,6 +17,25 @@ from harness.scaffold import ScaffoldGenerator
 from harness.statistics import StatisticalAnalyzer
 
 console = Console()
+
+
+def require_api_key(command_name: str) -> None:
+    """Check that ANTHROPIC_API_KEY is set, exit with error if not.
+
+    Use this for commands that require LLM grading to fail fast
+    instead of failing later during execution.
+
+    Args:
+        command_name: Name of the command requiring the key (for error message)
+    """
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        console.print(
+            f"[red]Error: ANTHROPIC_API_KEY is required for '{command_name}'.[/red]"
+        )
+        console.print(
+            "[dim]Set it in your .env file or environment before running this command.[/dim]"
+        )
+        sys.exit(1)
 
 
 def load_env_file(env_file: Path | None = None) -> bool:
@@ -140,6 +160,9 @@ def run(
     preserve_artifacts: bool,
 ):
     """Run a single evaluation task."""
+    # Fail early if API key is missing (needed for LLM grading)
+    require_api_key("run")
+
     runner = EvalRunner(
         use_container=container,
         preserve_artifacts=preserve_artifacts,
@@ -224,6 +247,9 @@ def matrix(
     preserve_artifacts: bool,
 ):
     """Run full evaluation matrix."""
+    # Fail early if API key is missing (needed for LLM grading)
+    require_api_key("matrix")
+
     runner = EvalRunner(
         use_container=container,
         preserve_artifacts=preserve_artifacts,

@@ -27,6 +27,29 @@ from harness.statistics import (
 )
 
 
+def _group_results_by_key(
+    results: list[EvalResult],
+    include_model: bool = True,
+) -> dict[tuple, list[EvalResult]]:
+    """Group evaluation results by task_id, config_name, and optionally model.
+
+    Args:
+        results: List of evaluation results to group
+        include_model: Whether to include model in the grouping key (default: True)
+
+    Returns:
+        Dictionary mapping (task_id, config_name[, model]) tuples to result lists
+    """
+    grouped: dict[tuple, list[EvalResult]] = defaultdict(list)
+    for r in results:
+        if include_model:
+            key = (r.task_id, r.config_name, r.model)
+        else:
+            key = (r.task_id, r.config_name)
+        grouped[key].append(r)
+    return grouped
+
+
 @dataclass
 class AggregatedMetrics:
     """Aggregated metrics for a group of results."""
@@ -172,17 +195,9 @@ class Reporter:
         self.console.print("\n[bold]REGRESSION COMPARISON[/bold]")
         self.console.print("=" * 60)
 
-        # Group by task + config
-        def group_key(r: EvalResult) -> tuple:
-            return (r.task_id, r.config_name, r.model)
-
-        baseline_grouped = defaultdict(list)
-        for r in baseline:
-            baseline_grouped[group_key(r)].append(r)
-
-        current_grouped = defaultdict(list)
-        for r in current:
-            current_grouped[group_key(r)].append(r)
+        # Group by task + config + model
+        baseline_grouped = _group_results_by_key(baseline)
+        current_grouped = _group_results_by_key(current)
 
         table = Table(show_header=True, header_style="bold cyan")
         table.add_column("Task")
@@ -447,17 +462,9 @@ class Reporter:
         self.console.print(f"\n[bold]DIFF: {label_a} vs {label_b}[/bold]")
         self.console.print("=" * 60)
 
-        # Group by task + config
-        def group_key(r: EvalResult) -> tuple:
-            return (r.task_id, r.config_name)
-
-        grouped_a: dict = {}
-        for r in results_a:
-            grouped_a.setdefault(group_key(r), []).append(r)
-
-        grouped_b: dict = {}
-        for r in results_b:
-            grouped_b.setdefault(group_key(r), []).append(r)
+        # Group by task + config (no model)
+        grouped_a = _group_results_by_key(results_a, include_model=False)
+        grouped_b = _group_results_by_key(results_b, include_model=False)
 
         all_keys = set(grouped_a.keys()) | set(grouped_b.keys())
 
@@ -683,16 +690,9 @@ class Reporter:
             Tuple of (has_regressions, comparison_data)
         """
 
-        def group_key(r: EvalResult) -> tuple:
-            return (r.task_id, r.config_name, r.model)
-
-        baseline_grouped = defaultdict(list)
-        for r in baseline:
-            baseline_grouped[group_key(r)].append(r)
-
-        current_grouped = defaultdict(list)
-        for r in current:
-            current_grouped[group_key(r)].append(r)
+        # Group by task + config + model
+        baseline_grouped = _group_results_by_key(baseline)
+        current_grouped = _group_results_by_key(current)
 
         regressions = []
         improvements = []

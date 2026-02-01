@@ -18,6 +18,7 @@ from pathlib import Path
 
 from anthropic import Anthropic
 
+from harness.constants import DEFAULT_GRADING_MODEL
 from harness.models import CriterionScore, ExecutionTrace, GradeResult, LLMAssertion, Task
 
 
@@ -38,7 +39,7 @@ class LLMGrader:
 
     def __init__(
         self,
-        model: str = "claude-3-5-haiku-20241022",
+        model: str = DEFAULT_GRADING_MODEL,
         api_key: str | None = None,
     ):
         """Initialize LLM grader.
