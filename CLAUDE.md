@@ -32,12 +32,17 @@ uv run python -m harness validate-task -t evals/tasks/coding/fix-auth-bypass.tas
 uv run python -m harness validate-config -c evals/configs/full/config.yaml
 
 # Tests
-uv run pytest                                      # Harness tests
+uv run pytest tests/                               # Harness tests
 cd fixtures/sample-project && uv run pytest tests/ # Fixture tests
 
 # Environment
 uv run python -m harness --env-file ~/.env env-status
 uv run python -m harness image-status             # Check Docker image status
+
+# Statistical Analysis (NEW)
+uv run python -m harness power-analysis -b 0.7 -e 0.1  # Sample size recommendation
+uv run python -m harness compare baseline.json current.json --statistical
+uv run python -m harness regression -b baseline.json -c current.json --statistical
 ```
 
 ## Architecture
@@ -53,6 +58,7 @@ See `docs/ARCHITECTURE.md` for full technical documentation.
 - `container_executor.py` - Docker-based execution
 - `container_manager.py` - Docker lifecycle management
 - `scaffold.py` - Skill-testing scaffold generation
+- `statistics.py` - Statistical analysis (Mann-Whitney U, power analysis, pass@k)
 - `graders/` - Code and LLM grading logic
 - `docker/` - Dockerfile and entrypoint for container isolation
 

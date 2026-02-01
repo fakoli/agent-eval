@@ -13,6 +13,7 @@ from harness.config_importer import ConfigImporter
 from harness.reporter import Reporter
 from harness.runner import EvalRunner
 from harness.scaffold import ScaffoldGenerator
+from harness.statistics import StatisticalAnalyzer
 
 console = Console()
 
@@ -287,8 +288,24 @@ def matrix(
     type=click.Path(exists=True, path_type=Path),
     help="Path to current results JSON",
 )
-def regression(baseline: Path, current: Path):
-    """Compare current results against baseline for regression detection."""
+@click.option(
+    "--statistical/--no-statistical",
+    default=True,
+    help="Use statistical significance testing (default: True)",
+)
+@click.option(
+    "--threshold",
+    "-t",
+    type=float,
+    default=0.05,
+    help="Regression threshold (default: 0.05 = 5%)",
+)
+def regression(baseline: Path, current: Path, statistical: bool, threshold: float):
+    """Compare current results against baseline for regression detection.
+
+    Uses statistical significance testing (Mann-Whitney U) by default to
+    reduce false positives from random variance.
+    """
     runner = EvalRunner()
     reporter = Reporter(console)
 
@@ -299,6 +316,27 @@ def regression(baseline: Path, current: Path):
     current_results = runner.load_results(current)
 
     reporter.print_regression_comparison(baseline_results, current_results)
+
+    # Check for regressions with statistical testing
+    has_regressions, comparison_data = reporter.check_regression(
+        baseline_results,
+        current_results,
+        threshold=threshold,
+        require_significance=statistical,
+    )
+
+    if statistical:
+        console.print("\n[dim]Using statistical significance testing (p < 0.05)[/dim]")
+
+    if has_regressions:
+        console.print(f"\n[red]REGRESSION DETECTED: {comparison_data['regression_count']} task(s)[/red]")
+        for reg in comparison_data["regressions"]:
+            console.print(f"  - {reg['task_id']}: {reg['delta']:+.0%}")
+            if "p_value" in reg:
+                console.print(f"    p-value: {reg['p_value']:.4f}, effect: {reg['effect_magnitude']}")
+        raise SystemExit(1)
+    else:
+        console.print("\n[green]No regressions detected[/green]")
 
 
 @cli.command()
@@ -700,6 +738,122 @@ def scaffold(
     except Exception as e:
         console.print(f"[red]Failed to create scaffold: {e}[/red]")
         raise SystemExit(1)
+
+
+@cli.command("power-analysis")
+@click.option(
+    "--baseline-rate",
+    "-b",
+    type=float,
+    required=True,
+    help="Expected baseline pass rate (0.0-1.0)",
+)
+@click.option(
+    "--min-effect",
+    "-e",
+    type=float,
+    default=0.1,
+    help="Minimum effect size to detect (default: 0.1 = 10%)",
+)
+@click.option(
+    "--power",
+    "-p",
+    type=float,
+    default=0.8,
+    help="Statistical power (default: 0.8 = 80%)",
+)
+@click.option(
+    "--alpha",
+    "-a",
+    type=float,
+    default=0.05,
+    help="Significance level (default: 0.05)",
+)
+def power_analysis(baseline_rate: float, min_effect: float, power: float, alpha: float):
+    """Calculate recommended sample size for reliable A/B testing.
+
+    Uses power analysis to determine how many evaluation runs are needed
+    to reliably detect a given effect size.
+
+    Example:
+        # How many runs to detect 10% improvement from 70% baseline?
+        uv run python -m harness power-analysis -b 0.7 -e 0.1
+    """
+    result = StatisticalAnalyzer.minimum_sample_size(
+        baseline_rate=baseline_rate,
+        min_effect=min_effect,
+        power=power,
+        alpha=alpha,
+    )
+
+    console.print("\n[bold]POWER ANALYSIS RESULTS[/bold]")
+    console.print("=" * 50)
+    console.print(f"  Baseline pass rate: {result.baseline_rate:.0%}")
+    console.print(f"  Minimum detectable effect: {result.min_detectable_effect:.0%}")
+    console.print(f"  Statistical power: {result.power:.0%}")
+    console.print(f"  Significance level (alpha): {result.alpha}")
+    console.print()
+    console.print(f"  [bold green]Recommended sample size: {result.recommended_sample_size}[/bold green]")
+    console.print()
+    console.print(f"  {result.notes}")
+    console.print()
+    console.print("[dim]Run this many evaluations per configuration for reliable comparison.[/dim]")
+
+
+@cli.command("compare")
+@click.argument("result_a", type=click.Path(exists=True, path_type=Path))
+@click.argument("result_b", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--label-a",
+    default="A",
+    help="Label for first result set (default: A)",
+)
+@click.option(
+    "--label-b",
+    default="B",
+    help="Label for second result set (default: B)",
+)
+@click.option(
+    "--statistical",
+    is_flag=True,
+    default=True,
+    help="Show statistical comparison (default: True)",
+)
+def compare(
+    result_a: Path,
+    result_b: Path,
+    label_a: str,
+    label_b: str,
+    statistical: bool,
+):
+    """Compare two result sets with statistical analysis.
+
+    Shows side-by-side comparison with Mann-Whitney U test,
+    effect size (Cohen's d), and actionable recommendations.
+
+    Example:
+        uv run python -m harness compare baseline.json current.json --statistical
+    """
+    runner = EvalRunner()
+    reporter = Reporter(console)
+
+    console.print(f"Loading {label_a} from {result_a}...")
+    results_a = runner.load_results(result_a)
+
+    console.print(f"Loading {label_b} from {result_b}...")
+    results_b = runner.load_results(result_b)
+
+    # Basic diff
+    reporter.print_diff(results_a, results_b, label_a=label_a, label_b=label_b)
+
+    # Statistical comparison if requested
+    if statistical:
+        reporter.print_statistical_comparison(
+            results_a,
+            results_b,
+            label_a=label_a,
+            label_b=label_b,
+        )
 
 
 @cli.command("build-image")

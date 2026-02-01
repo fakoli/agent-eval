@@ -50,6 +50,8 @@ class CodeCheckType(str, Enum):
     FILE_EXISTS = "file_exists"
     FILE_NOT_CONTAINS = "file_not_contains"
     COMMAND_SUCCEEDS = "command_succeeds"
+    RUFF_CLEAN = "ruff_clean"
+    MYPY_CLEAN = "mypy_clean"
 
 
 class Assertion(BaseModel, ABC):
@@ -73,6 +75,10 @@ class LLMAssertion(Assertion):
 
     type: Literal[AssertionType.LLM] = AssertionType.LLM
     rubric: str
+    # Calibration examples for anchoring LLM scoring (research-based)
+    passing_example: str | None = None
+    failing_example: str | None = None
+    borderline_example: str | None = None
 
 
 class Task(BaseModel):
@@ -87,6 +93,8 @@ class Task(BaseModel):
     scoring: dict[str, float] = Field(default_factory=dict)
     fixture_path: Path | None = None
     timeout_seconds: int = 300
+    # Optional per-task pass threshold (overrides difficulty-based threshold)
+    pass_threshold: float | None = None
 
     @property
     def code_assertions(self) -> list[CodeAssertion]:
@@ -134,6 +142,139 @@ class TokenUsage(BaseModel):
     def total_tokens(self) -> int:
         """Total tokens used."""
         return self.input_tokens + self.output_tokens
+
+
+class CostMetrics(BaseModel):
+    """Cost tracking for evaluation runs."""
+
+    input_cost_usd: float = 0.0
+    output_cost_usd: float = 0.0
+    total_cost_usd: float = 0.0
+
+    @classmethod
+    def from_usage(
+        cls,
+        usage: "TokenUsage",
+        input_cost_per_1m: float = 3.0,
+        output_cost_per_1m: float = 15.0,
+    ) -> "CostMetrics":
+        """Calculate costs from token usage.
+
+        Default prices are for Claude 3.5 Sonnet.
+        """
+        input_cost = (usage.input_tokens / 1_000_000) * input_cost_per_1m
+        output_cost = (usage.output_tokens / 1_000_000) * output_cost_per_1m
+        return cls(
+            input_cost_usd=input_cost,
+            output_cost_usd=output_cost,
+            total_cost_usd=input_cost + output_cost,
+        )
+
+
+class ToolCallPattern(BaseModel):
+    """Behavioral patterns extracted from tool calls."""
+
+    read_before_write: bool = False  # Good practice indicator
+    test_driven: bool = False  # Ran tests early
+    error_recovery_attempts: int = 0  # How many fix cycles
+    exploration_ratio: float = 0.0  # Read vs Write ratio
+
+    @classmethod
+    def from_tool_calls(cls, tool_calls: list["ToolCall"]) -> "ToolCallPattern":
+        """Analyze tool calls to extract behavioral patterns."""
+        if not tool_calls:
+            return cls()
+
+        read_tools = {"Read", "Glob", "Grep", "LS"}
+        write_tools = {"Write", "Edit"}
+        test_tools = {"Bash"}  # Detect pytest/test commands
+
+        read_count = 0
+        write_count = 0
+        first_write_idx = None
+        first_read_idx = None
+        first_test_idx = None
+        error_count = 0
+
+        for idx, tc in enumerate(tool_calls):
+            if tc.name in read_tools:
+                read_count += 1
+                if first_read_idx is None:
+                    first_read_idx = idx
+            if tc.name in write_tools:
+                write_count += 1
+                if first_write_idx is None:
+                    first_write_idx = idx
+            if tc.name in test_tools and tc.input:
+                cmd = tc.input.get("command", "")
+                if "pytest" in cmd or "test" in cmd.lower():
+                    if first_test_idx is None:
+                        first_test_idx = idx
+            if tc.error:
+                error_count += 1
+
+        # Calculate patterns
+        read_before_write = (
+            first_read_idx is not None
+            and first_write_idx is not None
+            and first_read_idx < first_write_idx
+        )
+        test_driven = (
+            first_test_idx is not None
+            and first_write_idx is not None
+            and first_test_idx < first_write_idx
+        )
+        total_rw = read_count + write_count
+        exploration_ratio = read_count / total_rw if total_rw > 0 else 0.0
+
+        return cls(
+            read_before_write=read_before_write,
+            test_driven=test_driven,
+            error_recovery_attempts=error_count,
+            exploration_ratio=exploration_ratio,
+        )
+
+
+class ReadabilityMetrics(BaseModel):
+    """Readability metrics for CLAUDE.md content quality."""
+
+    flesch_reading_ease: float = 0.0
+    flesch_kincaid_grade: float = 0.0
+    word_count: int = 0
+    sentence_count: int = 0
+    is_accessible: bool = False  # FRE >= 50
+
+    @classmethod
+    def from_content(cls, content: str) -> "ReadabilityMetrics":
+        """Calculate readability metrics from text content.
+
+        Requires textstat package.
+        """
+        try:
+            import textstat
+
+            fre = textstat.flesch_reading_ease(content)
+            fkg = textstat.flesch_kincaid_grade(content)
+            words = textstat.lexicon_count(content, removepunct=True)
+            sentences = textstat.sentence_count(content)
+
+            return cls(
+                flesch_reading_ease=fre,
+                flesch_kincaid_grade=fkg,
+                word_count=words,
+                sentence_count=sentences,
+                is_accessible=fre >= 50,
+            )
+        except ImportError:
+            # textstat not installed
+            words = len(content.split())
+            return cls(
+                flesch_reading_ease=0.0,
+                flesch_kincaid_grade=0.0,
+                word_count=words,
+                sentence_count=0,
+                is_accessible=False,
+            )
 
 
 class ConfigSnapshot(BaseModel):

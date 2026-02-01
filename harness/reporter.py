@@ -1,4 +1,11 @@
-"""Results reporting and analysis."""
+"""Results reporting and analysis.
+
+Features:
+- Statistical significance testing for comparisons
+- Stability metrics (variance, coefficient of variation)
+- Unbiased pass@k estimation
+- CLAUDE.md quality metrics
+"""
 
 import json
 from collections import defaultdict
@@ -12,6 +19,11 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from harness.models import EvalResult
+from harness.statistics import (
+    ComparisonResult,
+    StabilityMetrics,
+    StatisticalAnalyzer,
+)
 
 
 @dataclass
@@ -26,6 +38,8 @@ class AggregatedMetrics:
     avg_tokens: int
     avg_duration: float
     pass_at_k: dict[int, float]  # k -> probability
+    # Stability metrics
+    stability: StabilityMetrics | None = None
 
 
 class Reporter:
@@ -114,16 +128,13 @@ class Reporter:
             sum(r.trace.duration_seconds for r in results) / total if total else 0
         )
 
-        # Calculate pass@k
+        # Calculate pass@k using unbiased estimator
         pass_at_k = {}
         for k in [1, 3, 5]:
-            if k <= total:
-                # pass@k = 1 - (C(n-c, k) / C(n, k)) where c = num passed
-                # Simplified: probability of at least one pass in k tries
-                p = passed / total if total else 0
-                pass_at_k[k] = 1 - (1 - p) ** k
-            else:
-                pass_at_k[k] = passed / total if total else 0
+            pass_at_k[k] = StatisticalAnalyzer.pass_at_k_unbiased(results, k)
+
+        # Calculate stability metrics
+        stability = StatisticalAnalyzer.calculate_stability(results) if results else None
 
         return AggregatedMetrics(
             total_runs=total,
@@ -134,6 +145,7 @@ class Reporter:
             avg_tokens=avg_tokens,
             avg_duration=avg_duration,
             pass_at_k=pass_at_k,
+            stability=stability,
         )
 
     def print_regression_comparison(
@@ -584,13 +596,18 @@ class Reporter:
         baseline: list[EvalResult],
         current: list[EvalResult],
         threshold: float = 0.05,
+        require_significance: bool = True,
     ) -> tuple[bool, dict]:
         """Check for regressions between baseline and current results.
+
+        Uses statistical significance testing (Mann-Whitney U) to reduce
+        false positives from random variance.
 
         Args:
             baseline: Previous baseline results
             current: Current results to compare
             threshold: Maximum acceptable drop in pass rate (default: 5%)
+            require_significance: Require p < 0.05 for regression (default: True)
 
         Returns:
             Tuple of (has_regressions, comparison_data)
@@ -616,20 +633,30 @@ class Reporter:
         for key in sorted(all_keys):
             task_id, config, model = key
 
+            baseline_results = baseline_grouped.get(key, [])
+            current_results = current_grouped.get(key, [])
+
             baseline_metrics = (
-                self._calculate_metrics(baseline_grouped[key])
-                if key in baseline_grouped
+                self._calculate_metrics(baseline_results)
+                if baseline_results
                 else None
             )
             current_metrics = (
-                self._calculate_metrics(current_grouped[key])
-                if key in current_grouped
+                self._calculate_metrics(current_results)
+                if current_results
                 else None
             )
 
             baseline_rate = baseline_metrics.pass_rate if baseline_metrics else 0
             current_rate = current_metrics.pass_rate if current_metrics else 0
             delta = current_rate - baseline_rate
+
+            # Run statistical comparison if both have results
+            stat_comparison = None
+            if baseline_results and current_results:
+                stat_comparison = StatisticalAnalyzer.compare_configs(
+                    baseline_results, current_results
+                )
 
             comparison = {
                 "task_id": task_id,
@@ -639,12 +666,29 @@ class Reporter:
                 "current_pass_rate": current_rate,
                 "delta": delta,
             }
+
+            # Add statistical details if available
+            if stat_comparison:
+                comparison["p_value"] = stat_comparison.p_value
+                comparison["effect_size"] = stat_comparison.effect_size
+                comparison["effect_magnitude"] = stat_comparison.effect_magnitude
+                comparison["is_significant"] = stat_comparison.is_significant
+                comparison["recommendation"] = stat_comparison.recommendation
+
             all_comparisons.append(comparison)
 
-            # Check against threshold
-            if delta < -threshold:
+            # Check for regression with optional significance requirement
+            is_regression = delta < -threshold
+            if require_significance and stat_comparison:
+                is_regression = is_regression and stat_comparison.is_significant
+
+            is_improvement = delta > threshold
+            if require_significance and stat_comparison:
+                is_improvement = is_improvement and stat_comparison.is_significant
+
+            if is_regression:
                 regressions.append(comparison)
-            elif delta > threshold:
+            elif is_improvement:
                 improvements.append(comparison)
 
         has_regressions = len(regressions) > 0
@@ -654,7 +698,72 @@ class Reporter:
             "regression_count": len(regressions),
             "improvement_count": len(improvements),
             "threshold": threshold,
+            "require_significance": require_significance,
             "regressions": regressions,
             "improvements": improvements,
             "comparisons": all_comparisons,
         }
+
+    def print_statistical_comparison(
+        self,
+        results_a: list[EvalResult],
+        results_b: list[EvalResult],
+        label_a: str = "Baseline",
+        label_b: str = "Current",
+    ) -> ComparisonResult:
+        """Print detailed statistical comparison between two result sets.
+
+        Args:
+            results_a: First result set
+            results_b: Second result set
+            label_a: Label for first set
+            label_b: Label for second set
+
+        Returns:
+            ComparisonResult with full statistical details
+        """
+        comparison = StatisticalAnalyzer.compare_configs(results_a, results_b)
+
+        self.console.print(f"\n[bold]STATISTICAL COMPARISON: {label_a} vs {label_b}[/bold]")
+        self.console.print("=" * 60)
+
+        # Summary table
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("Metric")
+        table.add_column(label_a)
+        table.add_column(label_b)
+        table.add_column("Delta")
+
+        table.add_row(
+            "Mean Score",
+            f"{comparison.mean_a:.3f}",
+            f"{comparison.mean_b:.3f}",
+            f"{comparison.delta:+.3f}",
+        )
+        table.add_row(
+            "Sample Size",
+            str(comparison.n_a),
+            str(comparison.n_b),
+            "",
+        )
+        self.console.print(table)
+
+        # Statistical test results
+        self.console.print("\n[bold]Statistical Test (Mann-Whitney U)[/bold]")
+        sig_color = "green" if comparison.is_significant else "yellow"
+        self.console.print(f"  U-statistic: {comparison.statistic:.2f}")
+        self.console.print(f"  p-value: {comparison.p_value:.4f}")
+        self.console.print(
+            f"  Significant: [{sig_color}]{'Yes' if comparison.is_significant else 'No'}[/{sig_color}] (alpha=0.05)"
+        )
+
+        # Effect size
+        self.console.print("\n[bold]Effect Size (Cohen's d)[/bold]")
+        self.console.print(f"  Effect size: {comparison.effect_size:.3f}")
+        self.console.print(f"  Magnitude: {comparison.effect_magnitude}")
+
+        # Recommendation
+        self.console.print("\n[bold]Recommendation[/bold]")
+        self.console.print(f"  {comparison.recommendation}")
+
+        return comparison
