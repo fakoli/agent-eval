@@ -18,7 +18,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
-from harness.models import EvalResult
+from harness.models import CostMetrics, EvalResult
 from harness.statistics import (
     ComparisonResult,
     EfficiencyComparison,
@@ -38,6 +38,7 @@ class AggregatedMetrics:
     avg_score: float
     avg_tokens: int
     avg_duration: float
+    avg_cost: float  # USD cost from token usage
     pass_at_k: dict[int, float]  # k -> probability
     # Stability metrics
     stability: StabilityMetrics | None = None
@@ -129,6 +130,13 @@ class Reporter:
             sum(r.trace.duration_seconds for r in results) / total if total else 0
         )
 
+        # Calculate cost from token usage
+        total_cost = sum(
+            CostMetrics.from_usage(r.trace.usage).total_cost_usd
+            for r in results
+        )
+        avg_cost = total_cost / total if total else 0
+
         # Calculate pass@k using unbiased estimator
         pass_at_k = {}
         for k in [1, 3, 5]:
@@ -145,6 +153,7 @@ class Reporter:
             avg_score=avg_score,
             avg_tokens=avg_tokens,
             avg_duration=avg_duration,
+            avg_cost=avg_cost,
             pass_at_k=pass_at_k,
             stability=stability,
         )
