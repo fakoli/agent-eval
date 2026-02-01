@@ -1,0 +1,63 @@
+# Rename this file to your-task.task.yaml after customizing
+
+id: your-task-id
+category: coding
+description: Brief description of what this task tests
+difficulty: medium
+
+prompt: |
+  Describe the task for the AI to complete.
+
+  Be specific about:
+  1. What needs to be done
+  2. What the success criteria are
+  3. Any constraints or requirements
+
+  Example:
+  "Fix the authentication function in src/auth.py so that it
+  properly validates empty passwords. The fix should return
+  an appropriate error message."
+
+# Path to your fixture project (relative to this file)
+fixture_path: ../fixtures/your-project
+
+assertions:
+  # Objective check: tests pass
+  - type: code
+    check: tests_pass
+    command: "uv run pytest tests/ -v"  # or your test command
+
+  # Objective check: file contains expected pattern
+  - type: code
+    check: file_contains
+    file: "src/your-file.py"
+    pattern: "expected_pattern"  # regex
+
+  # Subjective check: LLM evaluates quality
+  - type: llm
+    rubric: |
+      Evaluate the implementation against your skill's principles:
+
+      1. First Principle (0-25 points):
+         - Does the code follow principle X?
+         - Is pattern Y applied correctly?
+
+      2. Second Principle (0-25 points):
+         - Does the code follow principle Z?
+         - Are edge cases handled?
+
+      3. Code Quality (0-25 points):
+         - Is the code clean and readable?
+         - Are there appropriate comments?
+
+      4. Overall (0-25 points):
+         - Would this pass code review?
+         - Is it production-ready?
+
+# Weights for each assertion type
+scoring:
+  tests_pass: 40
+  file_contains: 20
+  llm_quality: 40
+
+timeout_seconds: 300

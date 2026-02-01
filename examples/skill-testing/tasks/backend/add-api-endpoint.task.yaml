@@ -1,0 +1,57 @@
+id: add-api-endpoint
+category: coding
+description: Add a new API endpoint following proper patterns
+difficulty: medium
+
+prompt: |
+  Add a new endpoint `GET /users/{user_id}/tasks` that returns all tasks
+  for a specific user.
+
+  Requirements:
+  1. Return 404 if the user doesn't exist
+  2. Return tasks in a structured response format
+  3. Include the total count of tasks
+  4. Handle errors appropriately
+
+  The endpoint should follow the existing patterns in the codebase.
+
+fixture_path: ../../fixtures/backend-api
+
+assertions:
+  - type: code
+    check: tests_pass
+    command: "uv run pytest tests/test_tasks.py -v"
+  - type: code
+    check: file_contains
+    file: "src/main.py"
+    pattern: "@app\\.(get|post).*users.*tasks"
+  - type: llm
+    rubric: |
+      Evaluate the implementation against backend development principles:
+
+      1. Route Handler Design (0-25 points):
+         - Is the route handler thin (validation → call domain → return response)?
+         - Is business logic separated from HTTP handling?
+         - Does it use proper type hints?
+
+      2. Error Handling (0-25 points):
+         - Are errors handled appropriately (not generic Exception)?
+         - Are error responses structured consistently?
+         - Are internal errors not exposed to consumers?
+
+      3. Response Format (0-25 points):
+         - Is the response format consistent with other endpoints?
+         - Does it include appropriate metadata (count, etc.)?
+         - Are Pydantic models used for response structure?
+
+      4. Code Quality (0-25 points):
+         - Does the code follow Python/FastAPI conventions?
+         - Is the implementation clean and readable?
+         - Are there appropriate docstrings?
+
+scoring:
+  tests_pass: 40
+  file_contains: 20
+  llm_quality: 40
+
+timeout_seconds: 300

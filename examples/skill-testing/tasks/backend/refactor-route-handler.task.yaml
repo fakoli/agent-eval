@@ -1,0 +1,51 @@
+id: refactor-route-handler
+category: coding
+description: Refactor a fat route handler to follow thin handler principles
+difficulty: hard
+
+prompt: |
+  The `POST /tasks` endpoint has too much logic inline - it mixes validation,
+  business logic, and persistence all in one function.
+
+  Refactor this endpoint to follow the "thin route handler" pattern:
+  1. Route handler should only: validate input → call service → return response
+  2. Extract business logic to a separate service function or class
+  3. Keep the same external behavior (all existing tests should pass)
+
+  You may create new files in src/ as needed (e.g., src/services.py).
+
+fixture_path: ../../fixtures/backend-api
+
+assertions:
+  - type: code
+    check: tests_pass
+    command: "uv run pytest tests/test_tasks.py -v"
+  - type: llm
+    rubric: |
+      Evaluate the refactoring against backend architecture principles:
+
+      1. Thin Handler Pattern (0-30 points):
+         - Is the route handler now thin (< 10 lines of actual logic)?
+         - Does it follow "validate → call domain → return response"?
+         - Is HTTP concern separated from business logic?
+
+      2. Service Layer (0-30 points):
+         - Is business logic extracted to a service function/class?
+         - Is the service testable in isolation?
+         - Does the service handle domain-level validation?
+
+      3. Code Organization (0-20 points):
+         - Is the code well-organized (separate files if needed)?
+         - Are responsibilities clearly separated?
+         - Is the structure scalable for more endpoints?
+
+      4. Backward Compatibility (0-20 points):
+         - Does the refactoring maintain the same API contract?
+         - Do all existing tests still pass?
+         - Is error handling preserved?
+
+scoring:
+  tests_pass: 50
+  llm_quality: 50
+
+timeout_seconds: 300

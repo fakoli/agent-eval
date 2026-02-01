@@ -1,0 +1,55 @@
+id: fix-error-handling
+category: coding
+description: Fix poor error handling patterns in the API
+difficulty: medium
+
+prompt: |
+  The `GET /tasks/{task_id}` endpoint has poor error handling:
+  - It catches generic Exception and exposes internal error messages
+  - It returns 500 for "not found" cases instead of 404
+
+  Fix the error handling to:
+  1. Return 404 with a user-friendly message when task is not found
+  2. Not expose internal error details in responses
+  3. Log errors appropriately (you can add a simple logging statement)
+
+fixture_path: ../../fixtures/backend-api
+
+assertions:
+  - type: code
+    check: tests_pass
+    command: "uv run pytest tests/test_tasks.py::test_get_task_not_found -v"
+  - type: code
+    check: file_contains
+    file: "src/main.py"
+    pattern: "(HTTPException.*404|status_code=404)"
+  - type: code
+    check: file_not_contains
+    file: "src/main.py"
+    pattern: "except Exception as e:\\s*:\\s*raise HTTPException.*str\\(e\\)"
+  - type: llm
+    rubric: |
+      Evaluate the error handling fix against backend principles:
+
+      1. Exception Handling (0-30 points):
+         - Is the specific exception (KeyError) caught instead of generic Exception?
+         - Is the error mapped to the correct HTTP status code (404)?
+         - Are internal errors not exposed to consumers?
+
+      2. Error Response Format (0-30 points):
+         - Does the error response follow a structured format?
+         - Is the error message user-friendly?
+         - Is it consistent with other endpoints?
+
+      3. Best Practices (0-40 points):
+         - Is there logging of the original error for debugging?
+         - Does the fix follow the "never catch generic Exception" principle?
+         - Is the code clean and maintainable?
+
+scoring:
+  tests_pass: 40
+  file_contains: 15
+  file_not_contains: 15
+  llm_quality: 30
+
+timeout_seconds: 300

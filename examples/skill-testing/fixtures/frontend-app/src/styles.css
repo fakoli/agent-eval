@@ -1,0 +1,149 @@
+/*
+ * Styles with intentional issues:
+ * - Poor color contrast
+ * - No focus states
+ * - Fixed sizing (not responsive)
+ * - Inconsistent spacing
+ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    /* ISSUE: Light gray on white - poor contrast */
+    color: #888;
+    background: #fff;
+}
+
+.container {
+    /* ISSUE: Fixed width, not responsive */
+    width: 800px;
+    margin: 0 auto;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    padding: 20px;
+    background: #f5f5f5;
+}
+
+.logo {
+    font-size: 24px;
+    font-weight: bold;
+    /* ISSUE: Low contrast */
+    color: #aaa;
+}
+
+.nav a {
+    margin-left: 20px;
+    text-decoration: none;
+    /* ISSUE: Very low contrast link color */
+    color: #ccc;
+}
+
+/* ISSUE: No hover or focus states for links */
+
+.content {
+    padding: 40px 20px;
+}
+
+.title {
+    font-size: 32px;
+    margin-bottom: 30px;
+    /* ISSUE: Inconsistent with body color but still poor contrast */
+    color: #999;
+}
+
+.add-task {
+    display: flex;
+    margin-bottom: 30px;
+    gap: 10px;
+}
+
+.add-task input {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid #ddd;
+    font-size: 16px;
+}
+
+/* ISSUE: No focus styles for input */
+
+.add-task button {
+    padding: 12px 20px;
+    /* ISSUE: Light background with light text - terrible contrast */
+    background: #eee;
+    color: #ccc;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+/* ISSUE: No focus indicator for button */
+
+.task-list {
+    /* ISSUE: Arbitrary spacing, not using consistent scale */
+    margin-bottom: 47px;
+}
+
+.task-item {
+    display: flex;
+    align-items: center;
+    /* ISSUE: Inconsistent padding */
+    padding: 15px 12px 14px 10px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+}
+
+/* ISSUE: No keyboard focus indicator for clickable items */
+
+.task-item img {
+    width: 20px;
+    height: 20px;
+    margin-right: 15px;
+}
+
+.task-item span {
+    flex: 1;
+}
+
+.task-item .delete {
+    /* ISSUE: Low contrast delete button */
+    color: #ddd;
+    font-size: 24px;
+    cursor: pointer;
+    /* ISSUE: Small click target */
+    padding: 2px;
+}
+
+.task-item.completed {
+    /* ISSUE: Even lower contrast for completed items */
+    color: #ccc;
+}
+
+.status {
+    /* ISSUE: Very low contrast */
+    color: #bbb;
+    font-size: 14px;
+}
+
+.footer {
+    padding: 20px;
+    text-align: center;
+    border-top: 1px solid #eee;
+    /* ISSUE: Hardcoded positioning, will break on different screen sizes */
+    margin-top: 100px;
+}
+
+/*
+ * MISSING:
+ * - Media queries for responsive design
+ * - Focus-visible styles
+ * - Reduced motion preferences
+ * - High contrast mode support
+ */
