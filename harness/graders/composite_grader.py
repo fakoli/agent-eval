@@ -1,4 +1,10 @@
-"""Composite grader combining code and LLM graders."""
+"""Composite grader combining code and LLM graders.
+
+Features:
+- Dynamic difficulty-based pass thresholds
+- Per-task threshold overrides
+- Weighted scoring with automatic fallback
+"""
 
 from pathlib import Path
 
@@ -10,7 +16,17 @@ from harness.models import (
     GradeResult,
     LLMAssertion,
     Task,
+    TaskDifficulty,
 )
+
+
+# Difficulty-based pass thresholds
+# Higher bar for easy tasks, lower bar for hard tasks
+DIFFICULTY_THRESHOLDS: dict[TaskDifficulty, float] = {
+    TaskDifficulty.EASY: 0.85,    # Easy tasks should score high
+    TaskDifficulty.MEDIUM: 0.70,  # Standard threshold
+    TaskDifficulty.HARD: 0.55,    # Hard tasks get more leeway
+}
 
 
 class CompositeGrader:
@@ -38,6 +54,13 @@ class CompositeGrader:
     ) -> tuple[list[GradeResult], float, bool]:
         """Grade a task execution against all assertions.
 
+        Uses dynamic thresholds based on task difficulty:
+        - Easy tasks: 85% threshold (higher bar)
+        - Medium tasks: 70% threshold (standard)
+        - Hard tasks: 55% threshold (more leeway)
+
+        Per-task threshold overrides difficulty-based threshold.
+
         Args:
             task: The task with assertions
             trace: Execution trace from the run
@@ -63,13 +86,33 @@ class CompositeGrader:
         # Calculate overall score using task's scoring weights
         overall_score = self._calculate_weighted_score(grades, task.scoring)
 
+        # Determine pass threshold
+        # Priority: task.pass_threshold > difficulty-based > default 0.7
+        if task.pass_threshold is not None:
+            threshold = task.pass_threshold
+        else:
+            threshold = DIFFICULTY_THRESHOLDS.get(task.difficulty, 0.7)
+
         # Determine pass/fail
-        # Pass if overall score >= 0.7 OR all code assertions pass
+        # Pass if overall score >= threshold OR all code assertions pass
         code_grades = [g for g in grades if g.assertion_id.startswith("code_")]
         all_code_passed = all(g.passed for g in code_grades) if code_grades else True
-        passed = overall_score >= 0.7 or all_code_passed
+        passed = overall_score >= threshold or all_code_passed
 
         return grades, overall_score, passed
+
+    def get_threshold_for_task(self, task: Task) -> float:
+        """Get the pass threshold for a specific task.
+
+        Args:
+            task: The task to get threshold for
+
+        Returns:
+            Pass threshold (0.0-1.0)
+        """
+        if task.pass_threshold is not None:
+            return task.pass_threshold
+        return DIFFICULTY_THRESHOLDS.get(task.difficulty, 0.7)
 
     def _calculate_weighted_score(
         self,

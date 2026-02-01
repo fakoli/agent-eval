@@ -1,4 +1,16 @@
-"""LLM-based graders for quality evaluation."""
+"""LLM-based graders for quality evaluation.
+
+Enhanced with research-based techniques for improved reliability:
+- Structured Chain-of-Thought prompting
+- Bias mitigation (position and verbosity)
+- Calibration examples for anchored scoring
+- Criterion-by-criterion evaluation
+
+Research sources:
+- LLMs-as-Judges Survey (arxiv.org/html/2412.05579v2)
+- Agent-as-a-Judge (arxiv.org/abs/2410.10934)
+- LLM-as-a-Judge Survey (arxiv.org/html/2411.15594v6)
+"""
 
 import json
 import os
@@ -7,6 +19,18 @@ from pathlib import Path
 from anthropic import Anthropic
 
 from harness.models import CriterionScore, ExecutionTrace, GradeResult, LLMAssertion, Task
+
+
+# Bias mitigation header - research shows this improves LLM judge accuracy
+BIAS_MITIGATION_HEADER = """
+IMPORTANT EVALUATION RULES:
+- Judge code quality, NOT output length or verbosity
+- A short, correct fix is better than a verbose, over-engineered one
+- Ignore formatting differences that don't affect functionality
+- Focus on whether requirements are MET, not on code style preferences
+- Do NOT favor the first solution you see (position bias)
+- Evaluate based on correctness and completeness, not impressiveness
+"""
 
 
 class LLMGrader:
@@ -47,12 +71,13 @@ class LLMGrader:
         # Read modified files for context
         final_code = self._read_modified_files(env_path)
 
-        # Build grading prompt
+        # Build grading prompt with calibration examples
         prompt = self._build_grading_prompt(
             task=task,
             rubric=assertion.rubric,
             trace=trace,
             final_code=final_code,
+            assertion=assertion,
         )
 
         try:
@@ -86,9 +111,42 @@ class LLMGrader:
         rubric: str,
         trace: ExecutionTrace,
         final_code: str,
+        assertion: LLMAssertion | None = None,
     ) -> str:
-        """Build the grading prompt for the LLM."""
+        """Build the grading prompt for the LLM.
+
+        Uses structured Chain-of-Thought prompting with bias mitigation
+        and optional calibration examples for anchored scoring.
+        """
+        # Build calibration section if examples are provided
+        calibration_section = ""
+        if assertion and (
+            assertion.passing_example
+            or assertion.failing_example
+            or assertion.borderline_example
+        ):
+            calibration_section = """
+## Calibration Examples (use these to anchor your scoring)
+"""
+            if assertion.passing_example:
+                calibration_section += f"""
+### PASSING Example (Score: 0.9-1.0)
+{assertion.passing_example}
+"""
+            if assertion.failing_example:
+                calibration_section += f"""
+### FAILING Example (Score: 0.0-0.3)
+{assertion.failing_example}
+"""
+            if assertion.borderline_example:
+                calibration_section += f"""
+### BORDERLINE Example (Score: 0.5-0.6)
+{assertion.borderline_example}
+"""
+
         return f"""You are evaluating an AI coding assistant's work on a task.
+
+{BIAS_MITIGATION_HEADER}
 
 ## Task Description
 {task.description}
@@ -98,24 +156,50 @@ class LLMGrader:
 
 ## Evaluation Rubric
 {rubric}
-
+{calibration_section}
 ## Assistant's Output
 {trace.result}
 
 ## Final Code State
 {final_code}
 
-## Instructions
-Evaluate the assistant's work against the rubric. For each criterion in the rubric:
-1. Assess whether it was met
-2. Provide a score from 0.0 to 1.0
-3. Explain your reasoning
+## Step-by-Step Evaluation Process
 
-Return your evaluation as JSON in this exact format:
+Follow this structured evaluation process:
+
+### Step 1: Identify Changes
+List the specific code changes made by the assistant. Quote the relevant code.
+
+### Step 2: Criterion-by-Criterion Evaluation
+For each criterion in the rubric:
+- Quote the relevant code that addresses this criterion
+- Explain whether and how it meets the criterion
+- Assign a score from 0.0 to 1.0 with clear justification
+
+### Step 3: Check for Regressions
+Verify no existing functionality was broken by the changes.
+- Did the assistant modify anything that could break existing behavior?
+- Are there any unintended side effects?
+
+### Step 4: Calculate Overall Score
+Weight criterion scores according to importance in the rubric.
+
+## Output Format
+Return your complete evaluation as JSON in this exact format:
 {{
+    "step1_changes": ["change1: description", "change2: description"],
     "criteria_scores": [
-        {{"criterion": "description", "score": 0.0-1.0, "reasoning": "explanation"}}
+        {{
+            "criterion": "criterion description",
+            "evidence": "quoted code or observation",
+            "score": 0.0-1.0,
+            "reasoning": "explanation of score"
+        }}
     ],
+    "regression_check": {{
+        "passed": true/false,
+        "notes": "any concerns about regressions"
+    }},
     "overall_score": 0.0-1.0,
     "overall_reasoning": "summary of evaluation",
     "passed": true/false
@@ -158,6 +242,8 @@ Only return valid JSON, no other text."""
     def _parse_response(self, response_text: str) -> GradeResult:
         """Parse LLM response into GradeResult.
 
+        Handles both the new structured CoT format and legacy format.
+
         Args:
             response_text: Raw response from LLM
 
@@ -193,18 +279,48 @@ Only return valid JSON, no other text."""
             criteria = data.get("criteria_scores", [])
             criteria_scores = []
             details_parts = []
+
+            # Handle new format with evidence field
             for c in criteria:
                 criterion = c.get("criterion", "unknown")
-                score = c.get("score", 0.0)
+                score = float(c.get("score", 0.0))
                 reason = c.get("reasoning", "")
-                details_parts.append(f"- {criterion}: {score:.2f} - {reason}")
+                evidence = c.get("evidence", "")
+
+                # Include evidence in details if present
+                if evidence:
+                    details_parts.append(
+                        f"- {criterion}: {score:.2f}\n  Evidence: {evidence}\n  Reasoning: {reason}"
+                    )
+                else:
+                    details_parts.append(f"- {criterion}: {score:.2f} - {reason}")
+
                 criteria_scores.append(
                     CriterionScore(
                         criterion=criterion,
                         score=score,
-                        reasoning=reason,
+                        reasoning=f"{evidence}\n{reason}" if evidence else reason,
                     )
                 )
+
+            # Extract step 1 changes if present (new format)
+            changes = data.get("step1_changes", [])
+            if changes:
+                changes_summary = "Changes identified: " + "; ".join(changes[:3])
+                if len(changes) > 3:
+                    changes_summary += f" (+{len(changes) - 3} more)"
+                details_parts.insert(0, changes_summary)
+
+            # Extract regression check if present (new format)
+            regression = data.get("regression_check", {})
+            if regression:
+                reg_passed = regression.get("passed", True)
+                reg_notes = regression.get("notes", "")
+                if not reg_passed:
+                    details_parts.append(f"REGRESSION WARNING: {reg_notes}")
+                    # Penalize score for regressions
+                    overall_score = min(overall_score, 0.5)
+                    passed = False
 
             details = "\n".join(details_parts) if details_parts else reasoning
 
