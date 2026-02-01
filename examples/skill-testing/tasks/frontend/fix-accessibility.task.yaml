@@ -1,0 +1,60 @@
+id: fix-accessibility
+category: coding
+description: Fix accessibility issues in the task list component
+difficulty: medium
+
+prompt: |
+  The task list app has several accessibility issues. Fix the following:
+
+  1. Add proper semantic HTML structure (header, main, footer, nav)
+  2. Add labels to form inputs
+  3. Make the task items keyboard accessible (they should respond to Enter/Space)
+  4. Add alt text to images
+  5. Add a skip link for keyboard users
+
+  The app should work for screen reader users and keyboard-only users.
+
+fixture_path: ../../fixtures/frontend-app
+
+assertions:
+  - type: code
+    check: tests_pass
+    command: "node tests/test_accessibility.js"
+  - type: code
+    check: file_contains
+    file: "src/index.html"
+    pattern: "<(header|main|footer|nav)"
+  - type: code
+    check: file_contains
+    file: "src/index.html"
+    pattern: "(aria-label|<label)"
+  - type: llm
+    rubric: |
+      Evaluate the accessibility fixes against frontend design principles:
+
+      1. Semantic Structure (0-25 points):
+         - Uses semantic HTML elements (header, main, nav, footer)?
+         - Has proper heading hierarchy (h1, h2, etc.)?
+         - Has skip link for keyboard navigation?
+
+      2. Form Accessibility (0-25 points):
+         - Input has associated label (for/id or aria-label)?
+         - Button has accessible name (visible text or aria-label)?
+         - Error messages are accessible?
+
+      3. Interactive Elements (0-25 points):
+         - Clickable elements use button or link elements?
+         - Keyboard focus is visible?
+         - Keyboard events (Enter/Space) work?
+
+      4. Images and Icons (0-25 points):
+         - Images have descriptive alt text?
+         - Icon-only buttons have aria-labels?
+         - Decorative images are marked appropriately?
+
+scoring:
+  tests_pass: 30
+  file_contains: 20
+  llm_quality: 50
+
+timeout_seconds: 300

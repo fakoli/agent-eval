@@ -1,0 +1,10 @@
+{
+  "name": "frontend-app",
+  "version": "1.0.0",
+  "description": "Sample frontend app with intentional accessibility and design issues",
+  "scripts": {
+    "test": "node tests/test_accessibility.js",
+    "serve": "python3 -m http.server 8080"
+  },
+  "devDependencies": {}
+}

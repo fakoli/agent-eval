@@ -1,0 +1,24 @@
+name: frontend-skill
+description: With frontend-design-principles skill for UX and accessibility
+
+# No additional CLAUDE.md - testing skill in isolation
+claude_md: null
+
+# Use the frontend design skill
+skills_path: ../../skills/frontend-design-principles
+
+# No agents
+agents_md: null
+
+# Model configuration
+model: claude-sonnet-4-20250514
+max_turns: 10
+
+# Standard tools
+allowed_tools:
+  - Read
+  - Edit
+  - Write
+  - Bash
+  - Grep
+  - Glob

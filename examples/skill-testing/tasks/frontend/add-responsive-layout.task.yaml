@@ -1,0 +1,61 @@
+id: add-responsive-layout
+category: coding
+description: Make the layout responsive and mobile-friendly
+difficulty: medium
+
+prompt: |
+  The current layout is fixed-width (800px) and doesn't work on mobile devices.
+
+  Make the layout responsive:
+  1. Use fluid widths instead of fixed (max-width instead of width)
+  2. Add media queries for different screen sizes
+  3. Ensure text remains readable on small screens
+  4. Fix any color contrast issues you find while working on this
+
+  The app should work well on mobile (320px), tablet (768px), and desktop (1024px+).
+
+fixture_path: ../../fixtures/frontend-app
+
+assertions:
+  - type: code
+    check: file_contains
+    file: "src/styles.css"
+    pattern: "@media"
+  - type: code
+    check: file_contains
+    file: "src/styles.css"
+    pattern: "max-width"
+  - type: code
+    check: file_not_contains
+    file: "src/styles.css"
+    pattern: "\\.container\\s*\\{[^}]*width:\\s*800px"
+  - type: llm
+    rubric: |
+      Evaluate the responsive design against frontend principles:
+
+      1. Layout Approach (0-25 points):
+         - Uses fluid/flexible widths (max-width, percentage, etc.)?
+         - Has appropriate breakpoints for mobile/tablet/desktop?
+         - Content reflows properly at different sizes?
+
+      2. Typography (0-25 points):
+         - Text remains readable at all sizes?
+         - Uses relative units (rem/em) for font sizes?
+         - Line length is appropriate (45-75 characters)?
+
+      3. Spacing & Touch Targets (0-25 points):
+         - Uses consistent spacing scale?
+         - Touch targets are appropriately sized (44x44px min)?
+         - Padding adjusts appropriately for mobile?
+
+      4. Visual Quality (0-25 points):
+         - Contrast ratios meet WCAG AA (4.5:1 for text)?
+         - Design looks intentional at all breakpoints?
+         - No horizontal scrolling on mobile?
+
+scoring:
+  file_contains: 20
+  file_not_contains: 10
+  llm_quality: 70
+
+timeout_seconds: 300

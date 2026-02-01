@@ -1,0 +1,57 @@
+id: implement-component
+category: coding
+description: Implement a card component following design system principles
+difficulty: medium
+
+prompt: |
+  Create a reusable TaskCard component that displays a single task. The component
+  should be extracted from the current inline task rendering in app.js.
+
+  Requirements:
+  1. Create a new function `createTaskCard(task)` that returns a DOM element
+  2. The card should be accessible (proper ARIA, keyboard support)
+  3. Use consistent spacing and follow a design scale
+  4. Include proper focus states
+
+  Replace the inline task rendering in renderTasks() to use this new component.
+
+fixture_path: ../../fixtures/frontend-app
+
+assertions:
+  - type: code
+    check: file_contains
+    file: "src/app.js"
+    pattern: "function createTaskCard"
+  - type: code
+    check: file_contains
+    file: "src/styles.css"
+    pattern: ":focus"
+  - type: llm
+    rubric: |
+      Evaluate the component implementation against design principles:
+
+      1. Component Design (0-25 points):
+         - Is the component properly encapsulated and reusable?
+         - Does it follow atomic design principles (atoms → molecules)?
+         - Is the API clear (what parameters, what it returns)?
+
+      2. Accessibility (0-25 points):
+         - Does it use proper semantic elements (button for actions)?
+         - Does it have keyboard support?
+         - Does it announce state changes to screen readers?
+
+      3. Visual Design (0-25 points):
+         - Does it use consistent spacing (design scale, not arbitrary)?
+         - Does it have proper visual hierarchy?
+         - Are focus states visible and clear?
+
+      4. Code Quality (0-25 points):
+         - Is the code clean and maintainable?
+         - Are there comments explaining the component's purpose?
+         - Is it integrated properly with the existing code?
+
+scoring:
+  file_contains: 30
+  llm_quality: 70
+
+timeout_seconds: 300

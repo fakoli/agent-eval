@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Task Manager</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- ISSUE: No skip link for keyboard users -->
+
+        <!-- ISSUE: Using div instead of semantic header -->
+        <div class="header">
+            <div class="logo">TaskApp</div>
+            <!-- ISSUE: No navigation landmark -->
+            <div class="nav">
+                <a href="#">Home</a>
+                <a href="#">Tasks</a>
+                <a href="#">Settings</a>
+            </div>
+        </div>
+
+        <!-- ISSUE: No main landmark -->
+        <div class="content">
+            <div class="title">My Tasks</div>
+
+            <!-- ISSUE: Form without labels, missing accessibility -->
+            <div class="add-task">
+                <!-- ISSUE: Input without label, no associated id -->
+                <input type="text" placeholder="Add a new task...">
+                <!-- ISSUE: Button with poor contrast, no accessible name context -->
+                <button onclick="addTask()">+</button>
+            </div>
+
+            <!-- ISSUE: List without proper list semantics -->
+            <div class="task-list">
+                <!-- ISSUE: Clickable div instead of button/link, no keyboard support -->
+                <div class="task-item" onclick="toggleTask(1)">
+                    <!-- ISSUE: Image without alt text -->
+                    <img src="checkbox.png">
+                    <span>Buy groceries</span>
+                    <!-- ISSUE: Icon-only button without accessible label -->
+                    <div class="delete" onclick="deleteTask(1)">×</div>
+                </div>
+                <div class="task-item completed" onclick="toggleTask(2)">
+                    <img src="checkbox-checked.png">
+                    <span style="text-decoration: line-through;">Call mom</span>
+                    <div class="delete" onclick="deleteTask(2)">×</div>
+                </div>
+                <div class="task-item" onclick="toggleTask(3)">
+                    <img src="checkbox.png">
+                    <span>Finish project</span>
+                    <div class="delete" onclick="deleteTask(3)">×</div>
+                </div>
+            </div>
+
+            <!-- ISSUE: Status message not announced to screen readers -->
+            <div class="status">3 tasks, 1 completed</div>
+        </div>
+
+        <!-- ISSUE: Footer not using semantic element -->
+        <div class="footer">
+            <!-- ISSUE: Low contrast text -->
+            <span style="color: #999;">© 2024 TaskApp</span>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
