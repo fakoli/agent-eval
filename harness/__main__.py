@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import click
@@ -16,6 +17,25 @@ from harness.scaffold import ScaffoldGenerator
 from harness.statistics import StatisticalAnalyzer
 
 console = Console()
+
+
+def require_api_key(command_name: str) -> None:
+    """Check that ANTHROPIC_API_KEY is set, exit with error if not.
+
+    Use this for commands that require LLM grading to fail fast
+    instead of failing later during execution.
+
+    Args:
+        command_name: Name of the command requiring the key (for error message)
+    """
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        console.print(
+            f"[red]Error: ANTHROPIC_API_KEY is required for '{command_name}'.[/red]"
+        )
+        console.print(
+            "[dim]Set it in your .env file or environment before running this command.[/dim]"
+        )
+        sys.exit(1)
 
 
 def load_env_file(env_file: Path | None = None) -> bool:
@@ -130,6 +150,18 @@ def cli(ctx: click.Context, env_file: Path | None):
     is_flag=True,
     help="Preserve full artifacts from the run (fixtures, output, diffs)",
 )
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Validate task and config without executing (no API calls)",
+)
+@click.option(
+    "--limit",
+    "-l",
+    type=int,
+    default=None,
+    help="Limit to N runs for quick testing",
+)
 def run(
     task: Path,
     config: Path,
@@ -138,20 +170,19 @@ def run(
     verbose: bool,
     container: bool,
     preserve_artifacts: bool,
+    dry_run: bool,
+    limit: int | None,
 ):
-    """Run a single evaluation task."""
+    """Run a single evaluation task.
+
+    Use --dry-run to validate configuration without executing.
+    Use --limit N to run only N samples for quick testing.
+    """
+    console.print(f"Loading task from {task}...")
     runner = EvalRunner(
         use_container=container,
         preserve_artifacts=preserve_artifacts,
     )
-    reporter = Reporter(console)
-
-    if container:
-        console.print("[dim]Running in container mode[/dim]")
-    if preserve_artifacts:
-        console.print(f"[dim]Artifacts will be saved to {runner.artifacts_dir}[/dim]")
-
-    console.print(f"Loading task from {task}...")
     task_obj = runner.load_task(task)
 
     console.print(f"Loading config from {config}...")
@@ -160,8 +191,59 @@ def run(
     if model:
         config_obj.model = model
 
+    # Dry-run mode: validate and report without executing
+    if dry_run:
+        console.print()
+        console.print("[bold]Dry-run validation[/bold]")
+        console.print("=" * 40)
+        console.print()
+        console.print("[green]✓[/green] Task loaded successfully")
+        console.print(f"  ID: {task_obj.id}")
+        console.print(f"  Category: {task_obj.category.value}")
+        console.print(f"  Difficulty: {task_obj.difficulty.value}")
+        console.print(f"  Assertions: {len(task_obj.assertions)} ({len(task_obj.code_assertions)} code, {len(task_obj.llm_assertions)} LLM)")
+        if task_obj.fixture_path:
+            if task_obj.fixture_path.exists():
+                console.print(f"  Fixture: [green]✓[/green] {task_obj.fixture_path}")
+            else:
+                console.print(f"  Fixture: [red]✗[/red] {task_obj.fixture_path} (not found)")
+        console.print()
+        console.print("[green]✓[/green] Config loaded successfully")
+        console.print(f"  Name: {config_obj.name}")
+        console.print(f"  Model: {config_obj.model}")
+        console.print(f"  Max turns: {config_obj.max_turns}")
+        console.print(f"  CLAUDE.md: {'Yes' if config_obj.claude_md else 'No'}")
+        console.print(f"  Skills: {'Yes' if config_obj.skills_path else 'No'}")
+        console.print()
+
+        # Check API key status
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if api_key:
+            console.print("[green]✓[/green] ANTHROPIC_API_KEY is set")
+        else:
+            console.print("[yellow]⚠[/yellow] ANTHROPIC_API_KEY not set (required for execution)")
+
+        console.print()
+        console.print("[dim]Dry-run complete. No API calls were made.[/dim]")
+        return
+
+    # Fail early if API key is missing (needed for LLM grading)
+    require_api_key("run")
+
+    reporter = Reporter(console)
+
+    if container:
+        console.print("[dim]Running in container mode[/dim]")
+    if preserve_artifacts:
+        console.print(f"[dim]Artifacts will be saved to {runner.artifacts_dir}[/dim]")
+
     console.print(f"Running evaluation: {task_obj.id} with {config_obj.name}...")
     console.print()
+
+    # Apply limit (for single run, limit > 0 means run once)
+    if limit is not None and limit <= 0:
+        console.print("[yellow]Limit is 0 or negative, no runs will be executed.[/yellow]")
+        return
 
     result = runner.run_single(task_obj, config_obj)
 
@@ -214,6 +296,18 @@ def run(
     is_flag=True,
     help="Preserve full artifacts from each run",
 )
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Validate tasks and configs without executing (no API calls)",
+)
+@click.option(
+    "--limit",
+    "-l",
+    type=int,
+    default=None,
+    help="Limit to N total runs for quick testing",
+)
 def matrix(
     tasks: str,
     configs: str,
@@ -222,18 +316,18 @@ def matrix(
     output: Path | None,
     container: bool,
     preserve_artifacts: bool,
+    dry_run: bool,
+    limit: int | None,
 ):
-    """Run full evaluation matrix."""
+    """Run full evaluation matrix.
+
+    Use --dry-run to validate configuration without executing.
+    Use --limit N to run only N total samples for quick testing.
+    """
     runner = EvalRunner(
         use_container=container,
         preserve_artifacts=preserve_artifacts,
     )
-    reporter = Reporter(console)
-
-    if container:
-        console.print("[dim]Running in container mode[/dim]")
-    if preserve_artifacts:
-        console.print(f"[dim]Artifacts will be saved to {runner.artifacts_dir}[/dim]")
 
     console.print(f"Loading tasks from {tasks}...")
     task_list = runner.load_tasks_from_glob(tasks)
@@ -246,7 +340,76 @@ def matrix(
     model_list = models.split(",") if models else None
 
     total_combos = len(task_list) * len(config_list) * (len(model_list) if model_list else 1) * runs
-    console.print(f"\nRunning {total_combos} total evaluations...")
+
+    # Dry-run mode: validate and report without executing
+    if dry_run:
+        console.print()
+        console.print("[bold]Dry-run validation[/bold]")
+        console.print("=" * 40)
+        console.print()
+
+        console.print("[bold]Tasks:[/bold]")
+        for task_obj in task_list:
+            fixture_status = ""
+            if task_obj.fixture_path:
+                if task_obj.fixture_path.exists():
+                    fixture_status = "[green]✓[/green]"
+                else:
+                    fixture_status = "[red]✗ fixture missing[/red]"
+            console.print(f"  [green]✓[/green] {task_obj.id} ({task_obj.category.value}) {fixture_status}")
+
+        console.print()
+        console.print("[bold]Configs:[/bold]")
+        for config_obj in config_list:
+            console.print(f"  [green]✓[/green] {config_obj.name} (model: {config_obj.model})")
+
+        console.print()
+        console.print("[bold]Matrix summary:[/bold]")
+        console.print(f"  Tasks: {len(task_list)}")
+        console.print(f"  Configs: {len(config_list)}")
+        console.print(f"  Models: {len(model_list) if model_list else 1}")
+        console.print(f"  Runs per combo: {runs}")
+        console.print(f"  [bold]Total evaluations: {total_combos}[/bold]")
+
+        if limit:
+            effective = min(limit, total_combos)
+            console.print(f"  With --limit {limit}: {effective} evaluations")
+
+        console.print()
+
+        # Check API key status
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if api_key:
+            console.print("[green]✓[/green] ANTHROPIC_API_KEY is set")
+        else:
+            console.print("[yellow]⚠[/yellow] ANTHROPIC_API_KEY not set (required for execution)")
+
+        console.print()
+        console.print("[dim]Dry-run complete. No API calls were made.[/dim]")
+        return
+
+    # Fail early if API key is missing (needed for LLM grading)
+    require_api_key("matrix")
+
+    reporter = Reporter(console)
+
+    if container:
+        console.print("[dim]Running in container mode[/dim]")
+    if preserve_artifacts:
+        console.print(f"[dim]Artifacts will be saved to {runner.artifacts_dir}[/dim]")
+
+    # Apply limit if specified
+    if limit is not None and limit <= 0:
+        console.print("[yellow]Limit is 0 or negative, no runs will be executed.[/yellow]")
+        return
+
+    effective_total = total_combos
+    if limit is not None:
+        effective_total = min(limit, total_combos)
+        if limit < total_combos:
+            console.print(f"[dim]Limited to {limit} of {total_combos} evaluations[/dim]")
+
+    console.print(f"\nRunning {effective_total} total evaluations...")
     console.print()
 
     completed = [0]
@@ -255,21 +418,23 @@ def matrix(
         completed[0] += 1
         status = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"
         console.print(
-            f"[{completed[0]}/{total_combos}] {task.id} | {config.name} | {model} | Run {run_idx + 1} | {status}"
+            f"[{completed[0]}/{effective_total}] {task.id} | {config.name} | {model} | Run {run_idx + 1} | {status}"
         )
 
-    results = runner.run_matrix(
+    # Run matrix with limit support
+    all_results = runner.run_matrix(
         tasks=task_list,
         configs=config_list,
         models=model_list,
         runs_per_combo=runs,
         callback=progress_callback,
+        limit=limit,
     )
 
     console.print()
-    reporter.print_summary(results)
+    reporter.print_summary(all_results)
 
-    output_path = runner.save_results(results, output.name if output else None)
+    output_path = runner.save_results(all_results, output.name if output else None)
     console.print(f"\n[green]Results saved to {output_path}[/green]")
 
 
@@ -954,6 +1119,234 @@ def image_status():
     else:
         console.print("[yellow]Image not found[/yellow]")
         console.print("Build with: uv run python -m harness build-image")
+
+
+@cli.command("ls")
+@click.argument("resource", type=click.Choice(["tasks", "configs"]), required=False)
+@click.option(
+    "--path",
+    "-p",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Base directory to search (default: current directory)",
+)
+def ls_resources(resource: str | None, path: Path | None):
+    """List available tasks and configs.
+
+    Discovers task and config files in the project.
+
+    Examples:
+        uv run python -m harness ls              # List all
+        uv run python -m harness ls tasks        # List tasks only
+        uv run python -m harness ls configs      # List configs only
+        uv run python -m harness ls --path evals/  # Search specific directory
+    """
+    base_path = path or Path(".")
+
+    show_tasks = resource is None or resource == "tasks"
+    show_configs = resource is None or resource == "configs"
+
+    if show_tasks:
+        console.print("\n[bold]Tasks[/bold]")
+        console.print("-" * 40)
+
+        task_patterns = [
+            "**/*.task.yaml",
+            "**/tasks/*.yaml",
+            "evals/tasks/**/*.yaml",
+        ]
+
+        tasks_found = set()
+        for pattern in task_patterns:
+            for task_path in base_path.glob(pattern):
+                if task_path not in tasks_found:
+                    tasks_found.add(task_path)
+                    try:
+                        runner = EvalRunner()
+                        task = runner.load_task(task_path)
+                        console.print(f"  [green]✓[/green] {task_path}")
+                        console.print(f"    [dim]ID: {task.id} | {task.category.value} | {task.difficulty.value}[/dim]")
+                    except Exception as e:
+                        console.print(f"  [yellow]⚠[/yellow] {task_path}")
+                        console.print(f"    [dim red]Error: {e}[/dim red]")
+
+        if not tasks_found:
+            console.print("  [dim]No tasks found[/dim]")
+
+    if show_configs:
+        console.print("\n[bold]Configs[/bold]")
+        console.print("-" * 40)
+
+        config_patterns = [
+            "**/config.yaml",
+            "**/configs/*.yaml",
+            "evals/configs/**/config.yaml",
+        ]
+
+        configs_found = set()
+        for pattern in config_patterns:
+            for config_path in base_path.glob(pattern):
+                if config_path not in configs_found:
+                    configs_found.add(config_path)
+                    try:
+                        runner = EvalRunner()
+                        config = runner.load_config(config_path)
+                        console.print(f"  [green]✓[/green] {config_path}")
+                        console.print(f"    [dim]Name: {config.name} | Model: {config.model}[/dim]")
+                    except Exception as e:
+                        console.print(f"  [yellow]⚠[/yellow] {config_path}")
+                        console.print(f"    [dim red]Error: {e}[/dim red]")
+
+        if not configs_found:
+            console.print("  [dim]No configs found[/dim]")
+
+    console.print()
+
+
+@cli.command("self-test")
+def self_test():
+    """Run internal verification checks.
+
+    Validates that all harness components are working correctly:
+    - Constants module is importable
+    - TokenUsage.from_dict() works
+    - Result grouping utility works
+    - CodeGrader helper works
+    - Config validation works
+    - Task validation works
+
+    Example:
+        uv run python -m harness self-test
+    """
+    console.print()
+    console.print("[bold]agent-eval Self-Test[/bold]")
+    console.print("=" * 40)
+    console.print()
+
+    checks = [
+        ("Constants module", _check_constants),
+        ("TokenUsage.from_dict()", _check_token_usage),
+        ("Result grouping utility", _check_result_grouping),
+        ("CodeGrader helper", _check_code_grader),
+        ("Config validation", _check_config_validation),
+        ("Task validation", _check_task_validation),
+    ]
+
+    passed = 0
+    failed = 0
+
+    for idx, (name, check_fn) in enumerate(checks, 1):
+        try:
+            check_fn()
+            console.print(f"[{idx}/{len(checks)}] {name}{'.' * (30 - len(name))} [green]✓[/green]")
+            passed += 1
+        except Exception as e:
+            console.print(f"[{idx}/{len(checks)}] {name}{'.' * (30 - len(name))} [red]✗[/red]")
+            console.print(f"       [dim]{e}[/dim]")
+            failed += 1
+
+    console.print()
+
+    # Check API key status
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if api_key:
+        console.print("API Key Status: [green]✓[/green] ANTHROPIC_API_KEY is set")
+    else:
+        console.print("API Key Status: [yellow]⚠[/yellow] ANTHROPIC_API_KEY not set")
+
+    console.print()
+
+    if failed == 0:
+        console.print("[green]All checks passed![/green]")
+    else:
+        console.print(f"[red]{failed} check(s) failed[/red]")
+        raise SystemExit(1)
+
+
+def _check_constants():
+    """Verify constants module is importable and has expected values."""
+    from harness.constants import (
+        DEFAULT_EXECUTION_MODEL,
+        DEFAULT_GRADING_MODEL,
+        DEFAULT_MAX_TURNS,
+        DEFAULT_EXECUTION_TIMEOUT,
+    )
+    assert DEFAULT_EXECUTION_MODEL == "claude-sonnet-4-20250514"
+    assert DEFAULT_GRADING_MODEL == "claude-3-5-haiku-20241022"
+    assert DEFAULT_MAX_TURNS == 10
+    assert DEFAULT_EXECUTION_TIMEOUT == 300
+
+
+def _check_token_usage():
+    """Verify TokenUsage.from_dict() works correctly."""
+    from harness.models import TokenUsage
+
+    data = {"input_tokens": 1000, "output_tokens": 500, "cache_read_tokens": 100}
+    usage = TokenUsage.from_dict(data)
+    assert usage.input_tokens == 1000
+    assert usage.output_tokens == 500
+    assert usage.total_tokens == 1500
+
+    # Test with partial data
+    partial = TokenUsage.from_dict({"input_tokens": 200})
+    assert partial.output_tokens == 0
+
+
+def _check_result_grouping():
+    """Verify _group_results_by_key() works correctly."""
+    from harness.reporter import _group_results_by_key
+    from harness.models import EvalResult, ExecutionTrace
+
+    results = [
+        EvalResult(
+            task_id="task1", config_name="cfg1", model="m1",
+            run_index=0, trace=ExecutionTrace(), passed=True
+        ),
+        EvalResult(
+            task_id="task1", config_name="cfg1", model="m1",
+            run_index=1, trace=ExecutionTrace(), passed=False
+        ),
+        EvalResult(
+            task_id="task2", config_name="cfg1", model="m1",
+            run_index=0, trace=ExecutionTrace(), passed=True
+        ),
+    ]
+
+    grouped = _group_results_by_key(results, include_model=True)
+    assert len(grouped) == 2
+    assert len(grouped[("task1", "cfg1", "m1")]) == 2
+
+
+def _check_code_grader():
+    """Verify CodeGrader._create_grade_result() works correctly."""
+    from harness.graders.code_graders import CodeGrader
+
+    grader = CodeGrader()
+    result = grader._create_grade_result("test", True, 0.95, "Details", "Output")
+    assert result.assertion_id == "test"
+    assert result.assertion_type == "code"
+    assert result.passed is True
+    assert result.score == 0.95
+
+
+def _check_config_validation():
+    """Verify config loading works with test config."""
+    test_config = Path(__file__).parent.parent / "examples/getting-started/configs/baseline/config.yaml"
+    if test_config.exists():
+        runner = EvalRunner()
+        config = runner.load_config(test_config)
+        assert config.name == "baseline"
+    # Skip if test config doesn't exist (not an error)
+
+
+def _check_task_validation():
+    """Verify task loading works with test task."""
+    test_task = Path(__file__).parent.parent / "examples/getting-started/tasks/fix-bug.task.yaml"
+    if test_task.exists():
+        runner = EvalRunner()
+        task = runner.load_task(test_task)
+        assert task.id == "fix-division-bug"
+    # Skip if test task doesn't exist (not an error)
 
 
 if __name__ == "__main__":

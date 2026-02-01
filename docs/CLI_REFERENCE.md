@@ -22,6 +22,87 @@ The CLI automatically loads environment variables from `.env` files in this orde
 
 ## Commands
 
+### self-test
+
+Run internal verification checks to validate the harness is working correctly.
+
+```bash
+uv run python -m harness self-test
+```
+
+Validates:
+- Constants module is importable
+- TokenUsage.from_dict() works
+- Result grouping utility works
+- CodeGrader helper works
+- Config validation works
+- Task validation works
+- API key status
+
+**Example Output:**
+```
+agent-eval Self-Test
+========================================
+
+[1/6] Constants module.............. ✓
+[2/6] TokenUsage.from_dict()........ ✓
+[3/6] Result grouping utility....... ✓
+[4/6] CodeGrader helper............. ✓
+[5/6] Config validation............. ✓
+[6/6] Task validation............... ✓
+
+API Key Status: ✓ ANTHROPIC_API_KEY is set
+
+All checks passed!
+```
+
+---
+
+### ls
+
+List available tasks and configs.
+
+```bash
+uv run python -m harness ls [tasks|configs] [OPTIONS]
+```
+
+| Argument/Option | Required | Default | Description |
+|-----------------|----------|---------|-------------|
+| `tasks` or `configs` | No | both | Filter to tasks or configs only |
+| `--path PATH` | No | current dir | Base directory to search |
+
+**Examples:**
+```bash
+# List all tasks and configs
+uv run python -m harness ls
+
+# List tasks only
+uv run python -m harness ls tasks
+
+# List configs only
+uv run python -m harness ls configs
+
+# Search specific directory
+uv run python -m harness ls --path examples/getting-started/
+```
+
+**Example Output:**
+```
+Tasks
+----------------------------------------
+  ✓ examples/getting-started/tasks/fix-bug.task.yaml
+    ID: fix-division-bug | coding | easy
+  ✓ examples/getting-started/tasks/add-feature.task.yaml
+    ID: add-email-validation | coding | medium
+
+Configs
+----------------------------------------
+  ✓ examples/getting-started/configs/baseline/config.yaml
+    Name: baseline | Model: claude-sonnet-4-20250514
+```
+
+---
+
 ### run
 
 Run a single evaluation task.
@@ -39,9 +120,17 @@ uv run python -m harness run [OPTIONS]
 | `--verbose` | `-v` | No | False | Show detailed output including full test output and diffs |
 | `--container` | - | No | False | Run evaluation in an isolated Docker container |
 | `--preserve-artifacts` | - | No | False | Preserve full artifacts from the run |
+| `--dry-run` | - | No | False | Validate task and config without executing (no API calls) |
+| `--limit N` | `-l` | No | - | Limit to N runs for quick testing |
 
 **Examples:**
 ```bash
+# Validate configuration without executing (dry-run)
+uv run python -m harness run \
+  -t examples/getting-started/tasks/fix-bug.task.yaml \
+  -c examples/getting-started/configs/baseline/config.yaml \
+  --dry-run
+
 # Basic run
 uv run python -m harness run \
   --task evals/tasks/coding/fix-auth-bypass.task.yaml \
@@ -59,6 +148,33 @@ uv run python -m harness run \
   -t evals/tasks/coding/fix-auth-bypass.task.yaml \
   -c evals/configs/full/config.yaml \
   --preserve-artifacts
+```
+
+**Dry-run Output:**
+```
+Loading task from examples/getting-started/tasks/fix-bug.task.yaml...
+Loading config from examples/getting-started/configs/baseline/config.yaml...
+
+Dry-run validation
+========================================
+
+✓ Task loaded successfully
+  ID: fix-division-bug
+  Category: coding
+  Difficulty: easy
+  Assertions: 3 (3 code, 0 LLM)
+  Fixture: ✓ examples/getting-started/fixtures/python-utils
+
+✓ Config loaded successfully
+  Name: baseline
+  Model: claude-sonnet-4-20250514
+  Max turns: 10
+  CLAUDE.md: No
+  Skills: No
+
+✓ ANTHROPIC_API_KEY is set
+
+Dry-run complete. No API calls were made.
 ```
 
 ---
@@ -80,9 +196,24 @@ uv run python -m harness matrix [OPTIONS]
 | `--output PATH` | `-o` | No | timestamped | Output file for results |
 | `--container` | - | No | False | Run evaluations in isolated Docker containers |
 | `--preserve-artifacts` | - | No | False | Preserve full artifacts from each run |
+| `--dry-run` | - | No | False | Validate tasks and configs without executing (no API calls) |
+| `--limit N` | `-l` | No | - | Limit to N total runs for quick testing |
 
 **Examples:**
 ```bash
+# Validate matrix configuration (dry-run)
+uv run python -m harness matrix \
+  --tasks "examples/getting-started/tasks/*.yaml" \
+  --configs "examples/getting-started/configs/*/config.yaml" \
+  --runs 3 \
+  --dry-run
+
+# Quick test with limit
+uv run python -m harness matrix \
+  --tasks "evals/tasks/**/*.task.yaml" \
+  --configs "evals/configs/*/config.yaml" \
+  --limit 5
+
 # Standard matrix run
 uv run python -m harness matrix \
   --tasks "evals/tasks/**/*.task.yaml" \

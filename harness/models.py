@@ -9,6 +9,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from harness.constants import DEFAULT_EXECUTION_MODEL, DEFAULT_MAX_TURNS
+
 
 class FileChange(BaseModel):
     """Record of a file modification during execution."""
@@ -115,8 +117,8 @@ class Config(BaseModel):
     claude_md: str | None = None
     skills_path: Path | None = None
     agents_md: str | None = None
-    model: str = "claude-sonnet-4-20250514"
-    max_turns: int = 10
+    model: str = DEFAULT_EXECUTION_MODEL
+    max_turns: int = DEFAULT_MAX_TURNS
     allowed_tools: list[str] | Literal["all"] = "all"
 
 
@@ -142,6 +144,23 @@ class TokenUsage(BaseModel):
     def total_tokens(self) -> int:
         """Total tokens used."""
         return self.input_tokens + self.output_tokens
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "TokenUsage":
+        """Create TokenUsage from a dictionary (e.g., from JSON output).
+
+        Args:
+            data: Dictionary with token usage fields
+
+        Returns:
+            TokenUsage instance with values from the dictionary
+        """
+        return cls(
+            input_tokens=data.get("input_tokens", 0),
+            output_tokens=data.get("output_tokens", 0),
+            cache_read_tokens=data.get("cache_read_tokens", 0),
+            cache_creation_tokens=data.get("cache_creation_tokens", 0),
+        )
 
 
 class CostMetrics(BaseModel):

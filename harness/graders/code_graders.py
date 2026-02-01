@@ -17,6 +17,36 @@ from harness.models import CodeAssertion, CodeCheckType, GradeResult
 class CodeGrader:
     """Grader for code-based objective checks."""
 
+    def _create_grade_result(
+        self,
+        assertion_name: str,
+        passed: bool,
+        score: float,
+        details: str,
+        full_output: str = "",
+    ) -> GradeResult:
+        """Create a GradeResult with common fields populated.
+
+        Args:
+            assertion_name: Name/ID of the assertion (e.g., 'tests_pass')
+            passed: Whether the assertion passed
+            score: Score from 0.0 to 1.0
+            details: Human-readable details
+            full_output: Full output from the check (optional)
+
+        Returns:
+            GradeResult with fields populated
+        """
+        return GradeResult(
+            assertion_id=assertion_name,
+            assertion_type="code",
+            assertion_name=assertion_name,
+            passed=passed,
+            score=score,
+            details=details,
+            full_output=full_output,
+        )
+
     def grade(self, assertion: CodeAssertion, env_path: Path) -> GradeResult:
         """Grade a code assertion.
 
@@ -32,36 +62,32 @@ class CodeGrader:
                 return self.grade_tests_pass(env_path, assertion.command or "pytest")
             case CodeCheckType.FILE_CONTAINS:
                 if not assertion.file or not assertion.pattern:
-                    return GradeResult(
-                        passed=False,
-                        score=0.0,
-                        details="file_contains requires file and pattern",
+                    return self._create_grade_result(
+                        "file_contains", False, 0.0,
+                        "file_contains requires file and pattern",
                     )
                 return self.grade_file_contains(env_path, assertion.file, assertion.pattern)
             case CodeCheckType.FILE_EXISTS:
                 if not assertion.file:
-                    return GradeResult(
-                        passed=False,
-                        score=0.0,
-                        details="file_exists requires file",
+                    return self._create_grade_result(
+                        "file_exists", False, 0.0,
+                        "file_exists requires file",
                     )
                 return self.grade_file_exists(env_path, assertion.file)
             case CodeCheckType.FILE_NOT_CONTAINS:
                 if not assertion.file or not assertion.pattern:
-                    return GradeResult(
-                        passed=False,
-                        score=0.0,
-                        details="file_not_contains requires file and pattern",
+                    return self._create_grade_result(
+                        "file_not_contains", False, 0.0,
+                        "file_not_contains requires file and pattern",
                     )
                 return self.grade_file_not_contains(
                     env_path, assertion.file, assertion.pattern
                 )
             case CodeCheckType.COMMAND_SUCCEEDS:
                 if not assertion.command:
-                    return GradeResult(
-                        passed=False,
-                        score=0.0,
-                        details="command_succeeds requires command",
+                    return self._create_grade_result(
+                        "command_succeeds", False, 0.0,
+                        "command_succeeds requires command",
                     )
                 return self.grade_command_succeeds(env_path, assertion.command)
             case CodeCheckType.RUFF_CLEAN:
@@ -69,10 +95,9 @@ class CodeGrader:
             case CodeCheckType.MYPY_CLEAN:
                 return self.grade_mypy_clean(env_path, assertion.pattern)
             case _:
-                return GradeResult(
-                    passed=False,
-                    score=0.0,
-                    details=f"Unknown check type: {assertion.check}",
+                return self._create_grade_result(
+                    "unknown", False, 0.0,
+                    f"Unknown check type: {assertion.check}",
                 )
 
     def grade_tests_pass(
@@ -127,47 +152,41 @@ class CodeGrader:
                 if error_count > 0:
                     details += f", {error_count} errors"
 
-                return GradeResult(
-                    assertion_id="tests_pass",
-                    assertion_type="code",
-                    assertion_name="tests_pass",
-                    passed=all_passed or meets_threshold,
-                    score=score,
-                    details=details,
-                    full_output=full_output,
+                return self._create_grade_result(
+                    "tests_pass",
+                    all_passed or meets_threshold,
+                    score,
+                    details,
+                    full_output,
                 )
             else:
                 # Couldn't parse test output, fall back to binary
                 passed = result.returncode == 0
                 details = result.stdout if passed else f"{result.stdout}\n{result.stderr}"
-                return GradeResult(
-                    assertion_id="tests_pass",
-                    assertion_type="code",
-                    assertion_name="tests_pass",
-                    passed=passed,
-                    score=1.0 if passed else 0.0,
-                    details=details[:2000],
-                    full_output=full_output,
+                return self._create_grade_result(
+                    "tests_pass",
+                    passed,
+                    1.0 if passed else 0.0,
+                    details[:2000],
+                    full_output,
                 )
         except subprocess.TimeoutExpired:
-            return GradeResult(
-                assertion_id="tests_pass",
-                assertion_type="code",
-                assertion_name="tests_pass",
-                passed=False,
-                score=0.0,
-                details="Test command timed out",
-                full_output="Test command timed out after 120 seconds",
+            return self._create_grade_result(
+                "tests_pass", False, 0.0,
+                "Test command timed out",
+                "Test command timed out after 120 seconds",
             )
-        except Exception as e:
-            return GradeResult(
-                assertion_id="tests_pass",
-                assertion_type="code",
-                assertion_name="tests_pass",
-                passed=False,
-                score=0.0,
-                details=f"Error running tests: {e}",
-                full_output=str(e),
+        except subprocess.SubprocessError as e:
+            return self._create_grade_result(
+                "tests_pass", False, 0.0,
+                f"Subprocess error running tests: {e}",
+                str(e),
+            )
+        except OSError as e:
+            return self._create_grade_result(
+                "tests_pass", False, 0.0,
+                f"OS error running tests: {e}",
+                str(e),
             )
 
     def grade_ruff_clean(
@@ -212,14 +231,10 @@ class CodeGrader:
             violation_count = len(violations)
 
             if violation_count == 0:
-                return GradeResult(
-                    assertion_id="ruff_clean",
-                    assertion_type="code",
-                    assertion_name="ruff_clean",
-                    passed=True,
-                    score=1.0,
-                    details="No linting violations",
-                    full_output=full_output,
+                return self._create_grade_result(
+                    "ruff_clean", True, 1.0,
+                    "No linting violations",
+                    full_output,
                 )
 
             # Partial credit: -0.1 per violation, minimum 0.0
@@ -236,45 +251,37 @@ class CodeGrader:
             if len(summary_parts) > 5:
                 details += f" (+{len(summary_parts) - 5} more rules)"
 
-            return GradeResult(
-                assertion_id="ruff_clean",
-                assertion_type="code",
-                assertion_name="ruff_clean",
-                passed=score >= 0.7,
-                score=score,
-                details=details,
-                full_output=full_output,
+            return self._create_grade_result(
+                "ruff_clean",
+                score >= 0.7,
+                score,
+                details,
+                full_output,
             )
 
         except FileNotFoundError:
-            return GradeResult(
-                assertion_id="ruff_clean",
-                assertion_type="code",
-                assertion_name="ruff_clean",
-                passed=False,
-                score=0.0,
-                details="ruff not found - install with: pip install ruff",
-                full_output="ruff command not found",
+            return self._create_grade_result(
+                "ruff_clean", False, 0.0,
+                "ruff not found - install with: pip install ruff",
+                "ruff command not found",
             )
         except subprocess.TimeoutExpired:
-            return GradeResult(
-                assertion_id="ruff_clean",
-                assertion_type="code",
-                assertion_name="ruff_clean",
-                passed=False,
-                score=0.0,
-                details="ruff command timed out",
-                full_output="ruff command timed out after 60 seconds",
+            return self._create_grade_result(
+                "ruff_clean", False, 0.0,
+                "ruff command timed out",
+                "ruff command timed out after 60 seconds",
             )
-        except Exception as e:
-            return GradeResult(
-                assertion_id="ruff_clean",
-                assertion_type="code",
-                assertion_name="ruff_clean",
-                passed=False,
-                score=0.0,
-                details=f"Error running ruff: {e}",
-                full_output=str(e),
+        except subprocess.SubprocessError as e:
+            return self._create_grade_result(
+                "ruff_clean", False, 0.0,
+                f"Subprocess error running ruff: {e}",
+                str(e),
+            )
+        except json.JSONDecodeError as e:
+            return self._create_grade_result(
+                "ruff_clean", False, 0.0,
+                f"Error parsing ruff output: {e}",
+                str(e),
             )
 
     def grade_mypy_clean(
@@ -319,14 +326,10 @@ class CodeGrader:
             error_count = len(error_lines)
 
             if result.returncode == 0 or error_count == 0:
-                return GradeResult(
-                    assertion_id="mypy_clean",
-                    assertion_type="code",
-                    assertion_name="mypy_clean",
-                    passed=True,
-                    score=1.0,
-                    details="No type errors",
-                    full_output=full_output,
+                return self._create_grade_result(
+                    "mypy_clean", True, 1.0,
+                    "No type errors",
+                    full_output,
                 )
 
             # Partial credit: -0.05 per error, minimum 0.0
@@ -338,45 +341,37 @@ class CodeGrader:
             if error_count > 3:
                 details = f"{error_count} type errors"
 
-            return GradeResult(
-                assertion_id="mypy_clean",
-                assertion_type="code",
-                assertion_name="mypy_clean",
-                passed=score >= 0.7,
-                score=score,
-                details=details,
-                full_output=full_output,
+            return self._create_grade_result(
+                "mypy_clean",
+                score >= 0.7,
+                score,
+                details,
+                full_output,
             )
 
         except FileNotFoundError:
-            return GradeResult(
-                assertion_id="mypy_clean",
-                assertion_type="code",
-                assertion_name="mypy_clean",
-                passed=False,
-                score=0.0,
-                details="mypy not found - install with: pip install mypy",
-                full_output="mypy command not found",
+            return self._create_grade_result(
+                "mypy_clean", False, 0.0,
+                "mypy not found - install with: pip install mypy",
+                "mypy command not found",
             )
         except subprocess.TimeoutExpired:
-            return GradeResult(
-                assertion_id="mypy_clean",
-                assertion_type="code",
-                assertion_name="mypy_clean",
-                passed=False,
-                score=0.0,
-                details="mypy command timed out",
-                full_output="mypy command timed out after 120 seconds",
+            return self._create_grade_result(
+                "mypy_clean", False, 0.0,
+                "mypy command timed out",
+                "mypy command timed out after 120 seconds",
             )
-        except Exception as e:
-            return GradeResult(
-                assertion_id="mypy_clean",
-                assertion_type="code",
-                assertion_name="mypy_clean",
-                passed=False,
-                score=0.0,
-                details=f"Error running mypy: {e}",
-                full_output=str(e),
+        except subprocess.SubprocessError as e:
+            return self._create_grade_result(
+                "mypy_clean", False, 0.0,
+                f"Subprocess error running mypy: {e}",
+                str(e),
+            )
+        except OSError as e:
+            return self._create_grade_result(
+                "mypy_clean", False, 0.0,
+                f"OS error running mypy: {e}",
+                str(e),
             )
 
     def grade_file_contains(
@@ -394,38 +389,34 @@ class CodeGrader:
         """
         file_path = env_path / file
         if not file_path.exists():
-            return GradeResult(
-                assertion_id="file_contains",
-                assertion_type="code",
-                assertion_name="file_contains",
-                passed=False,
-                score=0.0,
-                details=f"File not found: {file}",
-                full_output=f"Expected file {file} does not exist",
+            return self._create_grade_result(
+                "file_contains", False, 0.0,
+                f"File not found: {file}",
+                f"Expected file {file} does not exist",
             )
 
         try:
             content = file_path.read_text()
             match = re.search(pattern, content)
             passed = match is not None
-            return GradeResult(
-                assertion_id="file_contains",
-                assertion_type="code",
-                assertion_name="file_contains",
-                passed=passed,
-                score=1.0 if passed else 0.0,
-                details=f"Pattern {'found' if passed else 'not found'}: {pattern}",
-                full_output=content[:5000] if len(content) > 5000 else content,
+            return self._create_grade_result(
+                "file_contains",
+                passed,
+                1.0 if passed else 0.0,
+                f"Pattern {'found' if passed else 'not found'}: {pattern}",
+                content[:5000] if len(content) > 5000 else content,
             )
-        except Exception as e:
-            return GradeResult(
-                assertion_id="file_contains",
-                assertion_type="code",
-                assertion_name="file_contains",
-                passed=False,
-                score=0.0,
-                details=f"Error reading file: {e}",
-                full_output=str(e),
+        except OSError as e:
+            return self._create_grade_result(
+                "file_contains", False, 0.0,
+                f"Error reading file: {e}",
+                str(e),
+            )
+        except re.error as e:
+            return self._create_grade_result(
+                "file_contains", False, 0.0,
+                f"Invalid regex pattern: {e}",
+                str(e),
             )
 
     def grade_file_not_contains(
@@ -443,38 +434,34 @@ class CodeGrader:
         """
         file_path = env_path / file
         if not file_path.exists():
-            return GradeResult(
-                assertion_id="file_not_contains",
-                assertion_type="code",
-                assertion_name="file_not_contains",
-                passed=False,
-                score=0.0,
-                details=f"File not found: {file}",
-                full_output=f"Expected file {file} does not exist",
+            return self._create_grade_result(
+                "file_not_contains", False, 0.0,
+                f"File not found: {file}",
+                f"Expected file {file} does not exist",
             )
 
         try:
             content = file_path.read_text()
             match = re.search(pattern, content)
             passed = match is None
-            return GradeResult(
-                assertion_id="file_not_contains",
-                assertion_type="code",
-                assertion_name="file_not_contains",
-                passed=passed,
-                score=1.0 if passed else 0.0,
-                details=f"Pattern {'absent' if passed else 'found'}: {pattern}",
-                full_output=content[:5000] if len(content) > 5000 else content,
+            return self._create_grade_result(
+                "file_not_contains",
+                passed,
+                1.0 if passed else 0.0,
+                f"Pattern {'absent' if passed else 'found'}: {pattern}",
+                content[:5000] if len(content) > 5000 else content,
             )
-        except Exception as e:
-            return GradeResult(
-                assertion_id="file_not_contains",
-                assertion_type="code",
-                assertion_name="file_not_contains",
-                passed=False,
-                score=0.0,
-                details=f"Error reading file: {e}",
-                full_output=str(e),
+        except OSError as e:
+            return self._create_grade_result(
+                "file_not_contains", False, 0.0,
+                f"Error reading file: {e}",
+                str(e),
+            )
+        except re.error as e:
+            return self._create_grade_result(
+                "file_not_contains", False, 0.0,
+                f"Invalid regex pattern: {e}",
+                str(e),
             )
 
     def grade_file_exists(self, env_path: Path, file: str) -> GradeResult:
@@ -489,14 +476,12 @@ class CodeGrader:
         """
         file_path = env_path / file
         passed = file_path.exists()
-        return GradeResult(
-            assertion_id="file_exists",
-            assertion_type="code",
-            assertion_name="file_exists",
-            passed=passed,
-            score=1.0 if passed else 0.0,
-            details=f"File {'exists' if passed else 'not found'}: {file}",
-            full_output=f"Checked path: {file_path}",
+        return self._create_grade_result(
+            "file_exists",
+            passed,
+            1.0 if passed else 0.0,
+            f"File {'exists' if passed else 'not found'}: {file}",
+            f"Checked path: {file_path}",
         )
 
     def grade_command_succeeds(self, env_path: Path, command: str) -> GradeResult:
@@ -520,32 +505,28 @@ class CodeGrader:
             )
             passed = result.returncode == 0
             full_output = f"{result.stdout}\n{result.stderr}".strip()
-            return GradeResult(
-                assertion_id="command_succeeds",
-                assertion_type="code",
-                assertion_name="command_succeeds",
-                passed=passed,
-                score=1.0 if passed else 0.0,
-                details=result.stdout[:1000] if passed else result.stderr[:1000],
-                full_output=full_output,
+            return self._create_grade_result(
+                "command_succeeds",
+                passed,
+                1.0 if passed else 0.0,
+                result.stdout[:1000] if passed else result.stderr[:1000],
+                full_output,
             )
         except subprocess.TimeoutExpired:
-            return GradeResult(
-                assertion_id="command_succeeds",
-                assertion_type="code",
-                assertion_name="command_succeeds",
-                passed=False,
-                score=0.0,
-                details="Command timed out",
-                full_output="Command timed out after 60 seconds",
+            return self._create_grade_result(
+                "command_succeeds", False, 0.0,
+                "Command timed out",
+                "Command timed out after 60 seconds",
             )
-        except Exception as e:
-            return GradeResult(
-                assertion_id="command_succeeds",
-                assertion_type="code",
-                assertion_name="command_succeeds",
-                passed=False,
-                score=0.0,
-                details=f"Error running command: {e}",
-                full_output=str(e),
+        except subprocess.SubprocessError as e:
+            return self._create_grade_result(
+                "command_succeeds", False, 0.0,
+                f"Subprocess error running command: {e}",
+                str(e),
+            )
+        except OSError as e:
+            return self._create_grade_result(
+                "command_succeeds", False, 0.0,
+                f"OS error running command: {e}",
+                str(e),
             )

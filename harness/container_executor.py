@@ -179,13 +179,7 @@ class ContainerExecutor(Executor):
             ExecutionTrace
         """
         # Extract token usage
-        usage_data = output.get("usage", {})
-        usage = TokenUsage(
-            input_tokens=usage_data.get("input_tokens", 0),
-            output_tokens=usage_data.get("output_tokens", 0),
-            cache_read_tokens=usage_data.get("cache_read_tokens", 0),
-            cache_creation_tokens=usage_data.get("cache_creation_tokens", 0),
-        )
+        usage = TokenUsage.from_dict(output.get("usage", {}))
 
         # Extract tool calls
         tool_calls = []

@@ -27,9 +27,17 @@ The goal is not to perfectly grade agent quality. The goal is to **reliably dete
 uv venv && source .venv/bin/activate
 uv sync
 
-# Validate configuration files
-uv run python -m harness validate-task -t evals/tasks/coding/fix-auth-bypass.task.yaml
-uv run python -m harness validate-config -c evals/configs/full/config.yaml
+# Verify harness is working
+uv run python -m harness self-test
+
+# Discover available tasks and configs
+uv run python -m harness ls --path examples/getting-started/
+
+# Validate without executing (dry-run)
+uv run python -m harness run \
+  -t examples/getting-started/tasks/fix-bug.task.yaml \
+  -c examples/getting-started/configs/baseline/config.yaml \
+  --dry-run
 
 # Run a single evaluation
 uv run python -m harness run \
@@ -41,6 +49,12 @@ uv run python -m harness matrix \
   --tasks "evals/tasks/**/*.task.yaml" \
   --configs "evals/configs/*/config.yaml" \
   --runs 3
+
+# Quick test with --limit (runs only N samples)
+uv run python -m harness matrix \
+  --tasks "evals/tasks/**/*.task.yaml" \
+  --configs "evals/configs/*/config.yaml" \
+  --limit 5
 
 # Compare results for regression detection
 uv run python -m harness regression \

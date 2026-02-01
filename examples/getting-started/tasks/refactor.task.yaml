@@ -1,0 +1,53 @@
+id: refactor-calculator
+category: refactoring
+description: Refactor calculator to use class-based design
+difficulty: medium
+
+prompt: |
+  Refactor `src/calculator.py` to use a class-based design.
+
+  Requirements:
+  - Create a `Calculator` class with methods: add, subtract, multiply, divide
+  - Keep the existing module-level functions as convenience wrappers
+  - The divide method should still raise ValueError for division by zero
+  - All existing tests must continue to pass
+  - Add a `history` property that tracks the last 10 operations
+
+  Example usage after refactor:
+  ```python
+  calc = Calculator()
+  result = calc.add(2, 3)  # Returns 5
+  print(calc.history)  # Shows recent operations
+  ```
+
+fixture_path: ../fixtures/python-utils
+
+assertions:
+  # All tests must still pass
+  - type: code
+    check: tests_pass
+    command: "python -m pytest tests/test_calculator.py -v"
+
+  # Class was created
+  - type: code
+    check: file_contains
+    file: src/calculator.py
+    pattern: "class Calculator"
+
+  # History feature added
+  - type: code
+    check: file_contains
+    file: src/calculator.py
+    pattern: "history"
+
+  # Original functions still exist
+  - type: code
+    check: file_contains
+    file: src/calculator.py
+    pattern: "^def add"
+
+scoring:
+  tests_pass: 50
+  file_contains: 50
+
+timeout_seconds: 240
