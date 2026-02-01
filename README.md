@@ -72,6 +72,18 @@ Tasks (what to test)     Configs (how to configure)     Graders (how to score)
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed technical documentation.
 
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [API Reference](docs/API_REFERENCE.md) | Complete class and method reference |
+| [CLI Reference](docs/CLI_REFERENCE.md) | All commands with options and examples |
+| [Grading Guide](docs/GRADING.md) | Scoring algorithm and assertion writing |
+| [Assertions Reference](docs/ASSERTIONS.md) | All assertion types with examples |
+| [JSON Schema](docs/JSON_SCHEMA.md) | Task, config, and results formats |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
+| [Extending](docs/EXTENDING.md) | Adding executors, graders, assertions |
+
 ## Key Metrics
 
 | Metric | Description |
