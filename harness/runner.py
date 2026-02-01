@@ -1,5 +1,6 @@
 """Main evaluation runner orchestrating the test matrix."""
 
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -32,6 +33,9 @@ class EvalRunner:
         grader: CompositeGrader | None = None,
         isolator: EnvironmentIsolator | None = None,
         results_dir: Path | None = None,
+        use_container: bool = False,
+        preserve_artifacts: bool = False,
+        artifacts_dir: Path | None = None,
     ):
         """Initialize the runner.
 
@@ -40,12 +44,30 @@ class EvalRunner:
             grader: Grader for evaluation (default: CompositeGrader)
             isolator: Environment isolator (default: EnvironmentIsolator)
             results_dir: Directory to store results
+            use_container: Whether to run evaluations in Docker containers
+            preserve_artifacts: Whether to preserve full artifacts from each run
+            artifacts_dir: Directory to store artifacts (default: evals/artifacts)
         """
-        self.executor = executor or ClaudeExecutor()
+        self.use_container = use_container
+        self.preserve_artifacts = preserve_artifacts
+        self.artifacts_dir = artifacts_dir or Path("evals/artifacts")
+
+        # Select executor based on container mode
+        if executor:
+            self.executor = executor
+        elif use_container:
+            from harness.container_executor import ContainerExecutor
+            self.executor = ContainerExecutor()
+        else:
+            self.executor = ClaudeExecutor()
+
         self.grader = grader or CompositeGrader()
         self.isolator = isolator or EnvironmentIsolator()
         self.results_dir = results_dir or Path("evals/results")
         self.results_dir.mkdir(parents=True, exist_ok=True)
+
+        if preserve_artifacts:
+            self.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     def run_single(
         self,
@@ -96,7 +118,7 @@ class EvalRunner:
             # Grade the results
             grades, overall_score, passed = self.grader.grade(task, trace, env.path)
 
-            return EvalResult(
+            result = EvalResult(
                 task_id=task.id,
                 config_name=config.name,
                 model=config.model,
@@ -106,6 +128,49 @@ class EvalRunner:
                 overall_score=overall_score,
                 passed=passed,
             )
+
+            # Archive run if preservation is enabled
+            if self.preserve_artifacts:
+                run_id = self._generate_run_id(task, config, run_index)
+                self.isolator.archive_run(
+                    env=env,
+                    run_id=run_id,
+                    artifacts_dir=self.artifacts_dir,
+                    before_state=before_state,
+                    metadata={
+                        "task_id": task.id,
+                        "config_name": config.name,
+                        "model": config.model,
+                        "run_index": run_index,
+                        "passed": passed,
+                        "overall_score": overall_score,
+                    },
+                    claude_output=trace.raw_output,
+                )
+
+            return result
+
+    def _generate_run_id(
+        self,
+        task: Task,
+        config: Config,
+        run_index: int,
+    ) -> str:
+        """Generate a unique run ID for artifact storage.
+
+        Args:
+            task: The task being run
+            config: The config being used
+            run_index: Run index
+
+        Returns:
+            Unique run ID string
+        """
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        # Create a short hash from task and config names
+        content = f"{task.id}:{config.name}:{run_index}"
+        short_hash = hashlib.md5(content.encode()).hexdigest()[:8]
+        return f"eval_{timestamp}_{short_hash}"
 
     def run_matrix(
         self,

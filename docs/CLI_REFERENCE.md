@@ -37,13 +37,28 @@ uv run python -m harness run [OPTIONS]
 | `--model MODEL` | `-m` | No | config value | Model to use (overrides config) |
 | `--output PATH` | `-o` | No | - | Output file for results |
 | `--verbose` | `-v` | No | False | Show detailed output including full test output and diffs |
+| `--container` | - | No | False | Run evaluation in an isolated Docker container |
+| `--preserve-artifacts` | - | No | False | Preserve full artifacts from the run |
 
-**Example:**
+**Examples:**
 ```bash
+# Basic run
 uv run python -m harness run \
   --task evals/tasks/coding/fix-auth-bypass.task.yaml \
   --config evals/configs/full/config.yaml \
   --verbose
+
+# Run in Docker container (requires build-image first)
+uv run python -m harness run \
+  -t evals/tasks/coding/fix-auth-bypass.task.yaml \
+  -c evals/configs/full/config.yaml \
+  --container
+
+# Preserve artifacts for debugging
+uv run python -m harness run \
+  -t evals/tasks/coding/fix-auth-bypass.task.yaml \
+  -c evals/configs/full/config.yaml \
+  --preserve-artifacts
 ```
 
 ---
@@ -63,14 +78,24 @@ uv run python -m harness matrix [OPTIONS]
 | `--models MODELS` | `-m` | No | config values | Comma-separated list of models |
 | `--runs N` | `-r` | No | 3 | Number of runs per combination |
 | `--output PATH` | `-o` | No | timestamped | Output file for results |
+| `--container` | - | No | False | Run evaluations in isolated Docker containers |
+| `--preserve-artifacts` | - | No | False | Preserve full artifacts from each run |
 
-**Example:**
+**Examples:**
 ```bash
+# Standard matrix run
 uv run python -m harness matrix \
   --tasks "evals/tasks/**/*.task.yaml" \
   --configs "evals/configs/*/config.yaml" \
   --models "claude-sonnet-4-20250514,claude-3-5-haiku-20241022" \
   --runs 3
+
+# Matrix in containers with artifact preservation
+uv run python -m harness matrix \
+  --tasks "evals/tasks/**/*.task.yaml" \
+  --configs "evals/configs/*/config.yaml" \
+  --container \
+  --preserve-artifacts
 ```
 
 ---
@@ -356,6 +381,115 @@ Optional Environment Variables
 
 ---
 
+### scaffold
+
+Generate a skill-testing directory structure.
+
+```bash
+uv run python -m harness scaffold [OPTIONS]
+```
+
+| Option | Short | Required | Default | Description |
+|--------|-------|----------|---------|-------------|
+| `--name NAME` | `-n` | Yes | - | Name of the skill test (directory name) |
+| `--output PATH` | `-o` | No | current dir | Output directory |
+| `--fixture-type TYPE` | - | No | python | Fixture type: `python` or `javascript` |
+| `--skill-path PATH` | - | No | - | Path to existing skill to copy |
+
+Creates a complete scaffold for A/B testing a skill:
+- Task definitions
+- Baseline and with-skill configs
+- Sample fixture project with tests
+- Run comparison script
+- Results directory with .gitignore
+
+**Examples:**
+```bash
+# Generate Python scaffold
+uv run python -m harness scaffold --name my-skill-test
+
+# Generate JavaScript scaffold
+uv run python -m harness scaffold --name my-skill-test --fixture-type javascript
+
+# Generate and copy existing skill
+uv run python -m harness scaffold \
+  --name my-skill-test \
+  --skill-path ~/.claude/skills/my-skill
+```
+
+**Generated Structure:**
+```
+my-skill-test/
+├── README.md
+├── run-comparison.sh
+├── tasks/
+│   └── example.task.yaml
+├── configs/
+│   ├── baseline/config.yaml
+│   └── with-skill/config.yaml
+├── fixtures/
+│   └── sample-project/
+├── skills/
+│   └── your-skill/
+└── results/
+```
+
+---
+
+### build-image
+
+Build the Docker container image for isolated evaluations.
+
+```bash
+uv run python -m harness build-image [OPTIONS]
+```
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `--no-cache` | No | False | Build without using Docker cache |
+
+The image includes:
+- Claude Code CLI
+- Python with uv package manager
+- Node.js for JavaScript fixtures
+- Non-root `eval` user for security
+
+**Example:**
+```bash
+# Build the image
+uv run python -m harness build-image
+
+# Force rebuild without cache
+uv run python -m harness build-image --no-cache
+```
+
+---
+
+### image-status
+
+Check the status of the evaluation container image.
+
+```bash
+uv run python -m harness image-status
+```
+
+**Example Output:**
+```
+Checking image: agent-eval:latest
+Image exists
+  Created: 2025-01-31T10:30:00Z
+  Size: 1234.5 MB
+```
+
+Or if image doesn't exist:
+```
+Checking image: agent-eval:latest
+Image not found
+Build with: uv run python -m harness build-image
+```
+
+---
+
 ## Exit Codes
 
 | Code | Meaning |
@@ -440,4 +574,50 @@ uv run python -m harness matrix \
 uv run python -m harness regression \
   -b baseline.json \
   -c current.json
+```
+
+### Testing a New Skill
+
+```bash
+# 1. Generate scaffold for skill testing
+uv run python -m harness scaffold \
+  --name my-skill-test \
+  --skill-path ~/.claude/skills/my-skill
+
+# 2. Customize the generated files
+cd my-skill-test
+# Edit tasks/example.task.yaml
+# Update fixtures/sample-project/ with relevant test code
+
+# 3. Run A/B comparison
+./run-comparison.sh
+
+# 4. Or manually with containers for isolation
+uv run python -m harness build-image  # first time only
+uv run python -m harness matrix \
+  -t "my-skill-test/tasks/*.yaml" \
+  -c "my-skill-test/configs/*/config.yaml" \
+  --container \
+  --preserve-artifacts
+```
+
+### Debugging a Failed Evaluation
+
+```bash
+# 1. Run with artifact preservation
+uv run python -m harness run \
+  -t evals/tasks/coding/my-task.yaml \
+  -c evals/configs/full/config.yaml \
+  --preserve-artifacts
+
+# 2. Examine artifacts
+ls evals/artifacts/eval_*/
+# metadata.json - run configuration
+# fixture_before.tar.gz - original state
+# fixture_after.tar.gz - modified state
+# file_changes.diff - all changes
+# claude_output.json - full Claude response
+
+# 3. Use explain for detailed breakdown
+uv run python -m harness explain evals/results/results.json -i 0
 ```
