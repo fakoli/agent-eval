@@ -380,15 +380,18 @@ class EnvironmentIsolator:
 
         def filter_func(tarinfo):
             """Filter out excluded patterns using proper pattern matching."""
-            # Check each path component for pattern matches
-            path_parts = Path(tarinfo.name).parts
+            path = Path(tarinfo.name)
+            
+            # Check if any path component or the full path matches any pattern
             for pattern in exclude_patterns:
-                # Check if any path part matches the pattern
-                for part in path_parts:
-                    if fnmatch.fnmatch(part, pattern):
-                        return None
-                # Also check the full path for patterns like .git
-                if fnmatch.fnmatch(tarinfo.name, pattern) or fnmatch.fnmatch(tarinfo.name, f"*/{pattern}") or fnmatch.fnmatch(tarinfo.name, f"*/{pattern}/*"):
+                # Check individual path parts (e.g., "__pycache__", "node_modules")
+                if any(fnmatch.fnmatch(part, pattern) for part in path.parts):
+                    return None
+                # Check full path with wildcards (e.g., "*.pyc")
+                if fnmatch.fnmatch(tarinfo.name, pattern):
+                    return None
+                # Check path with pattern anywhere in it
+                if fnmatch.fnmatch(tarinfo.name, f"**/{pattern}") or fnmatch.fnmatch(tarinfo.name, f"**/{pattern}/**"):
                     return None
             return tarinfo
 

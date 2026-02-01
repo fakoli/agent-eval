@@ -245,10 +245,12 @@ class ContainerManager:
         model: str,
         max_turns: int,
     ) -> list[str]:
-        """Build the docker run command."""
-        # Use host UID:GID to avoid permission issues with mounted volumes
-        # Get current user's UID and GID, fallback to config.user if not available
-        import os
+        """Build the docker run command.
+        
+        Uses host UID:GID on Unix systems to avoid permission issues with mounted volumes.
+        On Windows or when UID/GID are unavailable, falls back to config.user.
+        """
+        # Get current user's UID and GID on Unix systems
         uid = os.getuid() if hasattr(os, 'getuid') else None
         gid = os.getgid() if hasattr(os, 'getgid') else None
         user_spec = f"{uid}:{gid}" if uid is not None and gid is not None else config.user
