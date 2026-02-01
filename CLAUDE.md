@@ -39,9 +39,10 @@ cd fixtures/sample-project && uv run pytest tests/ # Fixture tests
 uv run python -m harness --env-file ~/.env env-status
 uv run python -m harness image-status             # Check Docker image status
 
-# Statistical Analysis (NEW)
+# Statistical Analysis
 uv run python -m harness power-analysis -b 0.7 -e 0.1  # Sample size recommendation
 uv run python -m harness compare baseline.json current.json --statistical
+uv run python -m harness compare baseline.json current.json --efficiency --cost  # Token/timing/cost analysis
 uv run python -m harness regression -b baseline.json -c current.json --statistical
 ```
 
@@ -58,7 +59,7 @@ See `docs/ARCHITECTURE.md` for full technical documentation.
 - `container_executor.py` - Docker-based execution
 - `container_manager.py` - Docker lifecycle management
 - `scaffold.py` - Skill-testing scaffold generation
-- `statistics.py` - Statistical analysis (Mann-Whitney U, power analysis, pass@k)
+- `statistics.py` - Statistical analysis (Mann-Whitney U, power analysis, pass@k, efficiency comparison)
 - `graders/` - Code and LLM grading logic
 - `docker/` - Dockerfile and entrypoint for container isolation
 

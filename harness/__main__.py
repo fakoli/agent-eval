@@ -819,20 +819,37 @@ def power_analysis(baseline_rate: float, min_effect: float, power: float, alpha:
     default=True,
     help="Show statistical comparison (default: True)",
 )
+@click.option(
+    "--efficiency/--no-efficiency",
+    default=True,
+    help="Include token/timing comparison (default: True)",
+)
+@click.option(
+    "--cost",
+    is_flag=True,
+    default=False,
+    help="Include USD cost comparison (default: False)",
+)
 def compare(
     result_a: Path,
     result_b: Path,
     label_a: str,
     label_b: str,
     statistical: bool,
+    efficiency: bool,
+    cost: bool,
 ):
     """Compare two result sets with statistical analysis.
 
     Shows side-by-side comparison with Mann-Whitney U test,
     effect size (Cohen's d), and actionable recommendations.
 
+    Use --efficiency to show token and timing comparisons with
+    statistical significance testing. Use --cost to add USD cost.
+
     Example:
         uv run python -m harness compare baseline.json current.json --statistical
+        uv run python -m harness compare baseline.json current.json --efficiency --cost
     """
     runner = EvalRunner()
     reporter = Reporter(console)
@@ -853,6 +870,8 @@ def compare(
             results_b,
             label_a=label_a,
             label_b=label_b,
+            show_efficiency=efficiency,
+            show_cost=cost,
         )
 
 

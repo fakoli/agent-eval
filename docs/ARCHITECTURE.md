@@ -38,6 +38,7 @@ harness/
 ├── isolator.py          # EnvironmentIsolator - temp dir + artifact archiving
 ├── scaffold.py          # ScaffoldGenerator - skill-testing templates
 ├── reporter.py          # Result formatting and comparison
+├── statistics.py        # Statistical analysis (Mann-Whitney U, power analysis, efficiency)
 ├── models.py            # Pydantic data models
 ├── config_exporter.py   # Export Claude config for CI
 ├── config_importer.py   # Import Claude config in CI

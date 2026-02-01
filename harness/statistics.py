@@ -32,6 +32,31 @@ class StabilityMetrics:
 
 
 @dataclass
+class EfficiencyComparison:
+    """Token and timing comparison between configs."""
+
+    tokens_a_mean: float
+    tokens_b_mean: float
+    tokens_delta: float  # b - a
+    tokens_delta_pct: float  # (b - a) / a * 100
+
+    duration_a_mean: float
+    duration_b_mean: float
+    duration_delta: float  # b - a
+    duration_delta_pct: float  # (b - a) / a * 100
+
+    cost_a_mean: float
+    cost_b_mean: float
+    cost_delta: float
+    cost_delta_pct: float
+
+    tokens_p_value: float | None  # Mann-Whitney on token counts
+    duration_p_value: float | None  # Mann-Whitney on durations
+
+    recommendation: str
+
+
+@dataclass
 class ComparisonResult:
     """Result of statistical comparison between two configurations."""
 
@@ -247,6 +272,152 @@ class StatisticalAnalyzer:
             relative_change=float(relative_change),
             recommendation=recommendation,
         )
+
+    @staticmethod
+    def compare_efficiency(
+        results_a: list["EvalResult"],
+        results_b: list["EvalResult"],
+    ) -> EfficiencyComparison:
+        """Compare token usage and timing between two config runs.
+
+        Calculates mean tokens, duration, and cost for each group,
+        and performs Mann-Whitney U tests on tokens and duration
+        to determine statistical significance of efficiency differences.
+
+        Args:
+            results_a: Results from first configuration
+            results_b: Results from second configuration
+
+        Returns:
+            EfficiencyComparison with efficiency metrics and statistical tests
+        """
+        from harness.models import CostMetrics
+
+        # Extract token counts, durations, and costs
+        tokens_a = np.array([r.trace.usage.total_tokens for r in results_a])
+        tokens_b = np.array([r.trace.usage.total_tokens for r in results_b])
+
+        durations_a = np.array([r.trace.duration_seconds for r in results_a])
+        durations_b = np.array([r.trace.duration_seconds for r in results_b])
+
+        costs_a = np.array([
+            CostMetrics.from_usage(r.trace.usage).total_cost_usd
+            for r in results_a
+        ])
+        costs_b = np.array([
+            CostMetrics.from_usage(r.trace.usage).total_cost_usd
+            for r in results_b
+        ])
+
+        # Calculate means
+        tokens_a_mean = float(np.mean(tokens_a)) if len(tokens_a) > 0 else 0.0
+        tokens_b_mean = float(np.mean(tokens_b)) if len(tokens_b) > 0 else 0.0
+        duration_a_mean = float(np.mean(durations_a)) if len(durations_a) > 0 else 0.0
+        duration_b_mean = float(np.mean(durations_b)) if len(durations_b) > 0 else 0.0
+        cost_a_mean = float(np.mean(costs_a)) if len(costs_a) > 0 else 0.0
+        cost_b_mean = float(np.mean(costs_b)) if len(costs_b) > 0 else 0.0
+
+        # Calculate deltas
+        tokens_delta = tokens_b_mean - tokens_a_mean
+        tokens_delta_pct = (tokens_delta / tokens_a_mean * 100) if tokens_a_mean > 0 else 0.0
+
+        duration_delta = duration_b_mean - duration_a_mean
+        duration_delta_pct = (duration_delta / duration_a_mean * 100) if duration_a_mean > 0 else 0.0
+
+        cost_delta = cost_b_mean - cost_a_mean
+        cost_delta_pct = (cost_delta / cost_a_mean * 100) if cost_a_mean > 0 else 0.0
+
+        # Perform Mann-Whitney U tests if sufficient samples
+        tokens_p_value: float | None = None
+        duration_p_value: float | None = None
+
+        if len(tokens_a) >= 2 and len(tokens_b) >= 2:
+            try:
+                _, tokens_p_value = stats.mannwhitneyu(
+                    tokens_a, tokens_b, alternative="two-sided"
+                )
+            except ValueError:
+                tokens_p_value = None
+
+            try:
+                _, duration_p_value = stats.mannwhitneyu(
+                    durations_a, durations_b, alternative="two-sided"
+                )
+            except ValueError:
+                duration_p_value = None
+
+        # Generate recommendation
+        recommendation = StatisticalAnalyzer._generate_efficiency_recommendation(
+            tokens_delta_pct=tokens_delta_pct,
+            duration_delta_pct=duration_delta_pct,
+            tokens_p_value=tokens_p_value,
+            duration_p_value=duration_p_value,
+            n_a=len(results_a),
+            n_b=len(results_b),
+        )
+
+        return EfficiencyComparison(
+            tokens_a_mean=tokens_a_mean,
+            tokens_b_mean=tokens_b_mean,
+            tokens_delta=tokens_delta,
+            tokens_delta_pct=tokens_delta_pct,
+            duration_a_mean=duration_a_mean,
+            duration_b_mean=duration_b_mean,
+            duration_delta=duration_delta,
+            duration_delta_pct=duration_delta_pct,
+            cost_a_mean=cost_a_mean,
+            cost_b_mean=cost_b_mean,
+            cost_delta=cost_delta,
+            cost_delta_pct=cost_delta_pct,
+            tokens_p_value=tokens_p_value,
+            duration_p_value=duration_p_value,
+            recommendation=recommendation,
+        )
+
+    @staticmethod
+    def _generate_efficiency_recommendation(
+        tokens_delta_pct: float,
+        duration_delta_pct: float,
+        tokens_p_value: float | None,
+        duration_p_value: float | None,
+        n_a: int,
+        n_b: int,
+    ) -> str:
+        """Generate human-readable recommendation for efficiency comparison."""
+        min_n = min(n_a, n_b)
+
+        if min_n < 2:
+            return "Insufficient samples for efficiency comparison (need at least 2 per group)."
+
+        parts = []
+
+        # Analyze token efficiency
+        tokens_sig = tokens_p_value is not None and tokens_p_value < 0.05
+        if abs(tokens_delta_pct) > 10:
+            direction = "fewer" if tokens_delta_pct < 0 else "more"
+            sig_note = " (statistically significant)" if tokens_sig else ""
+            parts.append(f"B uses {abs(tokens_delta_pct):.0f}% {direction} tokens{sig_note}.")
+
+        # Analyze duration efficiency
+        duration_sig = duration_p_value is not None and duration_p_value < 0.05
+        if abs(duration_delta_pct) > 10:
+            direction = "faster" if duration_delta_pct < 0 else "slower"
+            sig_note = " (statistically significant)" if duration_sig else ""
+            parts.append(f"B is {abs(duration_delta_pct):.0f}% {direction}{sig_note}.")
+
+        if not parts:
+            return "No significant efficiency differences detected between configurations."
+
+        # Overall assessment
+        both_better = tokens_delta_pct < -10 and duration_delta_pct < -10
+        both_worse = tokens_delta_pct > 10 and duration_delta_pct > 10
+
+        if both_better:
+            parts.append("B is more efficient overall.")
+        elif both_worse:
+            parts.append("B is less efficient overall.")
+
+        return " ".join(parts)
 
     @staticmethod
     def _generate_recommendation(

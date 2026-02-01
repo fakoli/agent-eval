@@ -108,16 +108,148 @@ Compare current results against baseline for regression detection.
 uv run python -m harness regression [OPTIONS]
 ```
 
-| Option | Short | Required | Description |
-|--------|-------|----------|-------------|
-| `--baseline PATH` | `-b` | Yes | Path to baseline results JSON |
-| `--current PATH` | `-c` | Yes | Path to current results JSON |
+| Option | Short | Required | Default | Description |
+|--------|-------|----------|---------|-------------|
+| `--baseline PATH` | `-b` | Yes | - | Path to baseline results JSON |
+| `--current PATH` | `-c` | Yes | - | Path to current results JSON |
+| `--statistical` / `--no-statistical` | - | No | True | Use statistical significance testing |
+| `--threshold` | `-t` | No | 0.05 | Regression threshold (5% default) |
 
 **Example:**
 ```bash
 uv run python -m harness regression \
   --baseline evals/results/baseline.json \
-  --current evals/results/current.json
+  --current evals/results/current.json \
+  --statistical
+
+# Without statistical significance testing
+uv run python -m harness regression \
+  --baseline baseline.json \
+  --current current.json \
+  --no-statistical \
+  --threshold 0.1
+```
+
+---
+
+### compare
+
+Compare two result sets with statistical analysis.
+
+```bash
+uv run python -m harness compare RESULT_A RESULT_B [OPTIONS]
+```
+
+| Argument/Option | Required | Default | Description |
+|-----------------|----------|---------|-------------|
+| `RESULT_A` | Yes | - | Path to first results JSON |
+| `RESULT_B` | Yes | - | Path to second results JSON |
+| `--label-a LABEL` | No | "A" | Label for first result set |
+| `--label-b LABEL` | No | "B" | Label for second result set |
+| `--statistical` | No | True | Show statistical comparison |
+| `--efficiency` / `--no-efficiency` | No | True | Include token/timing comparison |
+| `--cost` | No | False | Include USD cost comparison |
+
+Shows:
+- Side-by-side pass rate comparison
+- Token usage comparison with delta percentages
+- Mann-Whitney U statistical test results
+- Effect size (Cohen's d) with magnitude
+- Duration comparison with p-values
+- Cost comparison (with `--cost` flag)
+- Actionable recommendations
+
+**Examples:**
+```bash
+# Full comparison with efficiency metrics
+uv run python -m harness compare baseline.json current.json --statistical
+
+# Include cost analysis
+uv run python -m harness compare baseline.json current.json --efficiency --cost
+
+# Score-only comparison (no efficiency metrics)
+uv run python -m harness compare baseline.json current.json --no-efficiency
+
+# Custom labels
+uv run python -m harness compare baseline.json with-skill.json \
+  --label-a "No Skill" --label-b "With Skill"
+```
+
+**Example Output:**
+```
+STATISTICAL COMPARISON: Baseline vs Current
+============================================================
+┏━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ Metric      ┃ Baseline ┃ Current ┃ Delta  ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ Mean Score  │ 0.720    │ 0.850   │ +0.130 │
+│ Sample Size │ 30       │ 30      │        │
+└─────────────┴──────────┴─────────┴────────┘
+
+Statistical Test (Mann-Whitney U)
+  U-statistic: 245.50
+  p-value: 0.0031
+  Significant: Yes (alpha=0.05)
+
+Effect Size (Cohen's d)
+  Effect size: 1.23
+  Magnitude: large
+
+Efficiency Analysis
+  Tokens:   12,450 → 9,960 (-20.0% fewer, p=0.012*)
+  Duration: 98.6s → 70.3s (-28.7% faster, p=0.008**)
+  Cost:     $0.4200 → $0.3400 (-19.0%)
+
+Recommendation
+  Significant large improvement detected (p=0.003, d=large).
+  B uses 20% fewer tokens (statistically significant). B is 29% faster (statistically significant). B is more efficient overall.
+```
+
+---
+
+### power-analysis
+
+Calculate recommended sample size for reliable A/B testing.
+
+```bash
+uv run python -m harness power-analysis [OPTIONS]
+```
+
+| Option | Short | Required | Default | Description |
+|--------|-------|----------|---------|-------------|
+| `--baseline-rate` | `-b` | Yes | - | Expected baseline pass rate (0.0-1.0) |
+| `--min-effect` | `-e` | No | 0.1 | Minimum effect size to detect (10% default) |
+| `--power` | `-p` | No | 0.8 | Statistical power (80% default) |
+| `--alpha` | `-a` | No | 0.05 | Significance level |
+
+Uses power analysis to determine how many evaluation runs are needed to reliably detect a given effect size.
+
+**Examples:**
+```bash
+# How many runs to detect 10% improvement from 70% baseline?
+uv run python -m harness power-analysis -b 0.7 -e 0.1
+
+# Detect smaller 5% effect (requires more samples)
+uv run python -m harness power-analysis -b 0.7 -e 0.05
+
+# Higher power requirement
+uv run python -m harness power-analysis -b 0.7 -e 0.1 -p 0.9
+```
+
+**Example Output:**
+```
+POWER ANALYSIS RESULTS
+==================================================
+  Baseline pass rate: 70%
+  Minimum detectable effect: 10%
+  Statistical power: 80%
+  Significance level (alpha): 0.05
+
+  Recommended sample size: 62
+
+  Sample size provides 80% power to detect 10% change.
+
+Run this many evaluations per configuration for reliable comparison.
 ```
 
 ---

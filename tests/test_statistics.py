@@ -6,13 +6,20 @@ from datetime import datetime
 from harness.models import EvalResult, ExecutionTrace, TokenUsage
 from harness.statistics import (
     ComparisonResult,
+    EfficiencyComparison,
     PowerAnalysisResult,
     StabilityMetrics,
     StatisticalAnalyzer,
 )
 
 
-def make_result(score: float, passed: bool) -> EvalResult:
+def make_result(
+    score: float,
+    passed: bool,
+    input_tokens: int = 100,
+    output_tokens: int = 50,
+    duration_seconds: float = 10.0,
+) -> EvalResult:
     """Create a minimal EvalResult for testing."""
     return EvalResult(
         task_id="test_task",
@@ -23,7 +30,8 @@ def make_result(score: float, passed: bool) -> EvalResult:
         trace=ExecutionTrace(
             session_id="test",
             result="test result",
-            usage=TokenUsage(input_tokens=100, output_tokens=50),
+            usage=TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens),
+            duration_seconds=duration_seconds,
         ),
         overall_score=score,
         passed=passed,
@@ -237,3 +245,170 @@ class TestIsRegression:
         # The regression might or might not be detected depending on implementation
         # but the key is that both options work
         assert isinstance(is_regressed_no_sig, bool)
+
+
+class TestCompareEfficiency:
+    """Tests for efficiency comparison (token usage and timing)."""
+
+    def test_identical_efficiency(self):
+        """Identical efficiency metrics should show no significant difference."""
+        results_a = [
+            make_result(0.8, True, input_tokens=1000, output_tokens=500, duration_seconds=10.0)
+            for _ in range(10)
+        ]
+        results_b = [
+            make_result(0.8, True, input_tokens=1000, output_tokens=500, duration_seconds=10.0)
+            for _ in range(10)
+        ]
+
+        efficiency = StatisticalAnalyzer.compare_efficiency(results_a, results_b)
+
+        assert isinstance(efficiency, EfficiencyComparison)
+        assert efficiency.tokens_delta == pytest.approx(0.0, abs=1)
+        assert efficiency.tokens_delta_pct == pytest.approx(0.0, abs=0.1)
+        assert efficiency.duration_delta == pytest.approx(0.0, abs=0.1)
+        assert efficiency.duration_delta_pct == pytest.approx(0.0, abs=0.1)
+
+    def test_fewer_tokens_detected(self):
+        """Config B using fewer tokens should be detected."""
+        results_a = [
+            make_result(0.8, True, input_tokens=10000, output_tokens=5000, duration_seconds=100.0)
+            for _ in range(10)
+        ]
+        results_b = [
+            make_result(0.8, True, input_tokens=8000, output_tokens=4000, duration_seconds=70.0)
+            for _ in range(10)
+        ]
+
+        efficiency = StatisticalAnalyzer.compare_efficiency(results_a, results_b)
+
+        # B uses fewer tokens (12000 vs 15000 = -20%)
+        assert efficiency.tokens_b_mean < efficiency.tokens_a_mean
+        assert efficiency.tokens_delta < 0
+        assert efficiency.tokens_delta_pct == pytest.approx(-20.0, abs=1.0)
+
+        # B is faster (70s vs 100s = -30%)
+        assert efficiency.duration_b_mean < efficiency.duration_a_mean
+        assert efficiency.duration_delta < 0
+        assert efficiency.duration_delta_pct == pytest.approx(-30.0, abs=1.0)
+
+        # P-values should be present and significant for clear differences
+        assert efficiency.tokens_p_value is not None
+        assert efficiency.duration_p_value is not None
+
+    def test_more_tokens_detected(self):
+        """Config B using more tokens should be detected as regression."""
+        results_a = [
+            make_result(0.8, True, input_tokens=5000, output_tokens=2500, duration_seconds=50.0)
+            for _ in range(10)
+        ]
+        results_b = [
+            make_result(0.8, True, input_tokens=7000, output_tokens=3500, duration_seconds=70.0)
+            for _ in range(10)
+        ]
+
+        efficiency = StatisticalAnalyzer.compare_efficiency(results_a, results_b)
+
+        # B uses more tokens (10500 vs 7500 = +40%)
+        assert efficiency.tokens_b_mean > efficiency.tokens_a_mean
+        assert efficiency.tokens_delta > 0
+        assert efficiency.tokens_delta_pct > 30
+
+        # B is slower
+        assert efficiency.duration_b_mean > efficiency.duration_a_mean
+        assert efficiency.duration_delta > 0
+
+    def test_cost_calculation(self):
+        """Cost should be calculated from token usage."""
+        results_a = [
+            make_result(0.8, True, input_tokens=1000000, output_tokens=500000, duration_seconds=100.0)
+            for _ in range(5)
+        ]
+        results_b = [
+            make_result(0.8, True, input_tokens=800000, output_tokens=400000, duration_seconds=80.0)
+            for _ in range(5)
+        ]
+
+        efficiency = StatisticalAnalyzer.compare_efficiency(results_a, results_b)
+
+        # Cost should be positive for both groups
+        assert efficiency.cost_a_mean > 0
+        assert efficiency.cost_b_mean > 0
+        # B should be cheaper (fewer tokens)
+        assert efficiency.cost_b_mean < efficiency.cost_a_mean
+        assert efficiency.cost_delta < 0
+        assert efficiency.cost_delta_pct < 0
+
+    def test_insufficient_samples(self):
+        """Should handle insufficient samples gracefully."""
+        results_a = [make_result(0.8, True)]
+        results_b = [make_result(0.8, True)]
+
+        efficiency = StatisticalAnalyzer.compare_efficiency(results_a, results_b)
+
+        # Should still calculate means
+        assert efficiency.tokens_a_mean > 0
+        assert efficiency.tokens_b_mean > 0
+        # But p-values should be None (not enough samples)
+        assert efficiency.tokens_p_value is None
+        assert efficiency.duration_p_value is None
+        assert "Insufficient" in efficiency.recommendation
+
+    def test_empty_results(self):
+        """Should handle empty results gracefully."""
+        efficiency = StatisticalAnalyzer.compare_efficiency([], [])
+
+        assert efficiency.tokens_a_mean == 0.0
+        assert efficiency.tokens_b_mean == 0.0
+        assert efficiency.duration_a_mean == 0.0
+        assert efficiency.duration_b_mean == 0.0
+
+    def test_zero_baseline_tokens(self):
+        """Should handle zero baseline tokens without division error."""
+        results_a = [
+            make_result(0.8, True, input_tokens=0, output_tokens=0, duration_seconds=10.0)
+            for _ in range(5)
+        ]
+        results_b = [
+            make_result(0.8, True, input_tokens=1000, output_tokens=500, duration_seconds=10.0)
+            for _ in range(5)
+        ]
+
+        efficiency = StatisticalAnalyzer.compare_efficiency(results_a, results_b)
+
+        # Should not raise division by zero
+        assert efficiency.tokens_delta_pct == 0.0  # Undefined, defaults to 0
+
+    def test_recommendation_for_efficiency_improvement(self):
+        """Recommendation should indicate efficiency improvement."""
+        results_a = [
+            make_result(0.8, True, input_tokens=10000, output_tokens=5000, duration_seconds=100.0)
+            for _ in range(10)
+        ]
+        results_b = [
+            make_result(0.8, True, input_tokens=7000, output_tokens=3500, duration_seconds=60.0)
+            for _ in range(10)
+        ]
+
+        efficiency = StatisticalAnalyzer.compare_efficiency(results_a, results_b)
+
+        # Both token and duration are better, recommendation should reflect this
+        assert "fewer tokens" in efficiency.recommendation.lower() or "more efficient" in efficiency.recommendation.lower()
+        assert "faster" in efficiency.recommendation.lower() or "more efficient" in efficiency.recommendation.lower()
+
+    def test_recommendation_for_efficiency_regression(self):
+        """Recommendation should indicate efficiency regression."""
+        results_a = [
+            make_result(0.8, True, input_tokens=5000, output_tokens=2500, duration_seconds=50.0)
+            for _ in range(10)
+        ]
+        results_b = [
+            make_result(0.8, True, input_tokens=10000, output_tokens=5000, duration_seconds=100.0)
+            for _ in range(10)
+        ]
+
+        efficiency = StatisticalAnalyzer.compare_efficiency(results_a, results_b)
+
+        # Both token and duration are worse, recommendation should reflect this
+        assert "more tokens" in efficiency.recommendation.lower() or "less efficient" in efficiency.recommendation.lower()
+        assert "slower" in efficiency.recommendation.lower() or "less efficient" in efficiency.recommendation.lower()

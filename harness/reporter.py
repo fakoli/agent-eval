@@ -21,6 +21,7 @@ from rich.table import Table
 from harness.models import EvalResult
 from harness.statistics import (
     ComparisonResult,
+    EfficiencyComparison,
     StabilityMetrics,
     StatisticalAnalyzer,
 )
@@ -180,14 +181,17 @@ class Reporter:
         table.add_column("Baseline")
         table.add_column("Current")
         table.add_column("Delta")
+        table.add_column("Tok Δ%")
+        table.add_column("Dur Δ%")
 
         all_keys = set(baseline_grouped.keys()) | set(current_grouped.keys())
 
         regressions = []
         improvements = []
+        efficiency_regressions = []
 
         for key in sorted(all_keys):
-            task_id, config, model = key
+            task_id, config, _ = key
 
             baseline_metrics = (
                 self._calculate_metrics(baseline_grouped[key])
@@ -216,7 +220,37 @@ class Reporter:
             else:
                 delta_str = "0%"
 
-            table.add_row(task_id, config, baseline_str, current_str, delta_str)
+            # Calculate token and duration deltas
+            baseline_tokens = baseline_metrics.avg_tokens if baseline_metrics else 0
+            current_tokens = current_metrics.avg_tokens if current_metrics else 0
+            baseline_dur = baseline_metrics.avg_duration if baseline_metrics else 0
+            current_dur = current_metrics.avg_duration if current_metrics else 0
+
+            if baseline_tokens > 0:
+                tok_delta_pct = (current_tokens - baseline_tokens) / baseline_tokens * 100
+                if tok_delta_pct > 10:
+                    tok_str = f"[red]+{tok_delta_pct:.0f}%[/red]"
+                    efficiency_regressions.append((key, "tokens", tok_delta_pct))
+                elif tok_delta_pct < -10:
+                    tok_str = f"[green]{tok_delta_pct:.0f}%[/green]"
+                else:
+                    tok_str = f"{tok_delta_pct:+.0f}%"
+            else:
+                tok_str = "N/A"
+
+            if baseline_dur > 0:
+                dur_delta_pct = (current_dur - baseline_dur) / baseline_dur * 100
+                if dur_delta_pct > 10:
+                    dur_str = f"[red]+{dur_delta_pct:.0f}%[/red]"
+                    efficiency_regressions.append((key, "duration", dur_delta_pct))
+                elif dur_delta_pct < -10:
+                    dur_str = f"[green]{dur_delta_pct:.0f}%[/green]"
+                else:
+                    dur_str = f"{dur_delta_pct:+.0f}%"
+            else:
+                dur_str = "N/A"
+
+            table.add_row(task_id, config, baseline_str, current_str, delta_str, tok_str, dur_str)
 
         self.console.print(table)
 
@@ -229,6 +263,10 @@ class Reporter:
         if improvements:
             self.console.print(
                 f"[green]Improvements: {len(improvements)} task(s) got better[/green]"
+            )
+        if efficiency_regressions:
+            self.console.print(
+                f"[yellow]Efficiency regressions: {len(efficiency_regressions)} metric(s) increased >10%[/yellow]"
             )
         if not regressions and not improvements:
             self.console.print("[yellow]No significant changes detected[/yellow]")
@@ -417,9 +455,12 @@ class Reporter:
         table = Table(show_header=True, header_style="bold cyan")
         table.add_column("Task")
         table.add_column("Config")
-        table.add_column(f"{label_a} Pass Rate")
-        table.add_column(f"{label_b} Pass Rate")
+        table.add_column(f"{label_a} Rate")
+        table.add_column(f"{label_b} Rate")
         table.add_column("Delta")
+        table.add_column(f"{label_a} Tok")
+        table.add_column(f"{label_b} Tok")
+        table.add_column("Tok Δ%")
         table.add_column("Winner")
 
         for key in sorted(all_keys):
@@ -435,6 +476,23 @@ class Reporter:
             rate_a_str = f"{rate_a:.0%}" if grouped_a.get(key) else "N/A"
             rate_b_str = f"{rate_b:.0%}" if grouped_b.get(key) else "N/A"
 
+            # Token comparison
+            tokens_a = metrics_a.avg_tokens if grouped_a.get(key) else 0
+            tokens_b = metrics_b.avg_tokens if grouped_b.get(key) else 0
+            tokens_a_str = f"{tokens_a:,}" if grouped_a.get(key) else "N/A"
+            tokens_b_str = f"{tokens_b:,}" if grouped_b.get(key) else "N/A"
+
+            if tokens_a > 0:
+                tok_delta_pct = (tokens_b - tokens_a) / tokens_a * 100
+                if tok_delta_pct > 10:
+                    tok_delta_str = f"[red]+{tok_delta_pct:.0f}%[/red]"
+                elif tok_delta_pct < -10:
+                    tok_delta_str = f"[green]{tok_delta_pct:.0f}%[/green]"
+                else:
+                    tok_delta_str = f"{tok_delta_pct:+.0f}%"
+            else:
+                tok_delta_str = "N/A"
+
             if delta > 0.05:
                 delta_str = f"[green]+{delta:.0%}[/green]"
                 winner = f"[green]{label_b}[/green]"
@@ -445,7 +503,10 @@ class Reporter:
                 delta_str = f"{delta:.0%}"
                 winner = "[dim]tie[/dim]"
 
-            table.add_row(task_id, config, rate_a_str, rate_b_str, delta_str, winner)
+            table.add_row(
+                task_id, config, rate_a_str, rate_b_str, delta_str,
+                tokens_a_str, tokens_b_str, tok_delta_str, winner
+            )
 
         self.console.print(table)
 
@@ -710,7 +771,9 @@ class Reporter:
         results_b: list[EvalResult],
         label_a: str = "Baseline",
         label_b: str = "Current",
-    ) -> ComparisonResult:
+        show_efficiency: bool = True,
+        show_cost: bool = False,
+    ) -> tuple[ComparisonResult, EfficiencyComparison | None]:
         """Print detailed statistical comparison between two result sets.
 
         Args:
@@ -718,9 +781,11 @@ class Reporter:
             results_b: Second result set
             label_a: Label for first set
             label_b: Label for second set
+            show_efficiency: Include token/timing comparison (default: True)
+            show_cost: Include cost comparison (default: False)
 
         Returns:
-            ComparisonResult with full statistical details
+            Tuple of (ComparisonResult, EfficiencyComparison or None)
         """
         comparison = StatisticalAnalyzer.compare_configs(results_a, results_b)
 
@@ -762,8 +827,86 @@ class Reporter:
         self.console.print(f"  Effect size: {comparison.effect_size:.3f}")
         self.console.print(f"  Magnitude: {comparison.effect_magnitude}")
 
+        # Efficiency analysis
+        efficiency: EfficiencyComparison | None = None
+        if show_efficiency:
+            efficiency = StatisticalAnalyzer.compare_efficiency(results_a, results_b)
+            self._print_efficiency_comparison(efficiency, label_a, label_b, show_cost)
+
         # Recommendation
         self.console.print("\n[bold]Recommendation[/bold]")
         self.console.print(f"  {comparison.recommendation}")
+        if efficiency:
+            self.console.print(f"  {efficiency.recommendation}")
 
-        return comparison
+        return comparison, efficiency
+
+    def _print_efficiency_comparison(
+        self,
+        efficiency: EfficiencyComparison,
+        label_a: str,  # noqa: ARG002
+        label_b: str,  # noqa: ARG002
+        show_cost: bool = False,
+    ) -> None:
+        """Print efficiency comparison section."""
+        # label_a and label_b reserved for future use in table headers
+        self.console.print("\n[bold]Efficiency Analysis[/bold]")
+
+        # Tokens
+        tok_delta_pct = efficiency.tokens_delta_pct
+        tok_p = efficiency.tokens_p_value
+        tok_sig = "*" if tok_p is not None and tok_p < 0.05 else ""
+        tok_sig += "*" if tok_p is not None and tok_p < 0.01 else ""
+
+        if tok_delta_pct < -10:
+            tok_color = "green"
+            tok_direction = f"{abs(tok_delta_pct):.1f}% fewer"
+        elif tok_delta_pct > 10:
+            tok_color = "red"
+            tok_direction = f"+{tok_delta_pct:.1f}% more"
+        else:
+            tok_color = "dim"
+            tok_direction = f"{tok_delta_pct:+.1f}%"
+
+        tok_p_str = f"p={tok_p:.3f}{tok_sig}" if tok_p is not None else "p=N/A"
+        self.console.print(
+            f"  Tokens:   {efficiency.tokens_a_mean:,.0f} → {efficiency.tokens_b_mean:,.0f} "
+            f"([{tok_color}]{tok_direction}[/{tok_color}], {tok_p_str})"
+        )
+
+        # Duration
+        dur_delta_pct = efficiency.duration_delta_pct
+        dur_p = efficiency.duration_p_value
+        dur_sig = "*" if dur_p is not None and dur_p < 0.05 else ""
+        dur_sig += "*" if dur_p is not None and dur_p < 0.01 else ""
+
+        if dur_delta_pct < -10:
+            dur_color = "green"
+            dur_direction = f"{abs(dur_delta_pct):.1f}% faster"
+        elif dur_delta_pct > 10:
+            dur_color = "red"
+            dur_direction = f"+{dur_delta_pct:.1f}% slower"
+        else:
+            dur_color = "dim"
+            dur_direction = f"{dur_delta_pct:+.1f}%"
+
+        dur_p_str = f"p={dur_p:.3f}{dur_sig}" if dur_p is not None else "p=N/A"
+        self.console.print(
+            f"  Duration: {efficiency.duration_a_mean:.1f}s → {efficiency.duration_b_mean:.1f}s "
+            f"([{dur_color}]{dur_direction}[/{dur_color}], {dur_p_str})"
+        )
+
+        # Cost (optional)
+        if show_cost:
+            cost_delta_pct = efficiency.cost_delta_pct
+            if cost_delta_pct < -5:
+                cost_color = "green"
+            elif cost_delta_pct > 5:
+                cost_color = "red"
+            else:
+                cost_color = "dim"
+
+            self.console.print(
+                f"  Cost:     ${efficiency.cost_a_mean:.4f} → ${efficiency.cost_b_mean:.4f} "
+                f"([{cost_color}]{cost_delta_pct:+.1f}%[/{cost_color}])"
+            )
