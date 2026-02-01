@@ -86,13 +86,19 @@ class ContainerExecutor(Executor):
                 user=self.config.user,
             )
 
+            # Prepare environment variables, including allowed tools if configured
+            env_vars: dict[str, str] = dict(env_override) if env_override is not None else {}
+            if getattr(config, "allowed_tools", None) is not None:
+                # Pass allowed tools as JSON so the container entrypoint can enforce them
+                env_vars["ALLOWED_TOOLS"] = json.dumps(config.allowed_tools)
+
             # Run evaluation in container
             result = self.manager.run_evaluation(
                 prompt=prompt,
                 fixture_path=working_dir,
                 results_path=results_path,
                 config=container_config,
-                env_vars=env_override,
+                env_vars=env_vars,
                 claude_md=config.claude_md,
                 skills_path=config.skills_path,
                 model=config.model,
