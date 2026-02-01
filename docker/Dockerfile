@@ -56,7 +56,7 @@ COPY --chown=eval:eval entrypoint.sh /home/eval/entrypoint.sh
 RUN chmod +x /home/eval/entrypoint.sh
 
 # Set working directory
-WORKDIR /workspace/project
+WORKDIR /home/eval/workspace/project
 
 # Default entrypoint
 ENTRYPOINT ["/home/eval/entrypoint.sh"]
